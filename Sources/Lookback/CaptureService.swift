@@ -3,15 +3,20 @@ import CoreGraphics
 import CryptoKit
 import Foundation
 
-/// Battery-friendly capture loop:
+/// Battery-friendly capture loop (app-wide singleton: closing the window
+/// must NOT stop capturing).
 /// - every 60s, on .utility queue
 /// - skips capture when machine idle (no input events) to save CPU/battery
 /// - skips saving when pixels identical to previous shot (static screen)
 /// - downscales main display to max 1280px wide, JPEG ~0.45
 final class CaptureService: ObservableObject {
+    static let shared = CaptureService()
+
     @Published var paused = false
     @Published var lastShotDate: Date?
-    @Published var shotCount24h = 0
+    @Published var permissionGranted = CGPreflightScreenCaptureAccess()
+    /// Human-readable reason for the last capture outcome (for the status line).
+    @Published var status = "—"
 
     private var timer: Timer?
     private var lastHash = ""
@@ -20,51 +25,87 @@ final class CaptureService: ObservableObject {
     // Idle threshold: no key/mouse event for 10 min -> skip capture.
     private let idleThreshold: TimeInterval = 10 * 60
 
+    private init() {}
+
     private var started = false
     func start() {
         guard !started else { return }
         started = true
-        stop()
+        permissionGranted = CGPreflightScreenCaptureAccess()
         ShotStore.cleanup()
-        capture() // capture once at launch
+        queue.async { self.capture() } // capture once at launch
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            self?.queue.async { self?.capture() }
+            guard let self else { return }
+            self.queue.async { self.capture() }
         }
     }
 
-    func stop() { timer?.invalidate(); timer = nil }
+    /// Ask the OS for Screen Recording permission. Call ONLY from an explicit
+    /// user tap — never automatically — or macOS nags on every launch.
+    func requestPermission() {
+        CGRequestScreenCaptureAccess()
+        // Re-check shortly after (user may grant in Settings).
+        queue.asyncAfter(deadline: .now() + 2) {
+            let ok = CGPreflightScreenCaptureAccess()
+            DispatchQueue.main.async { self.permissionGranted = ok }
+        }
+    }
+
+    func refreshPermission() {
+        permissionGranted = CGPreflightScreenCaptureAccess()
+    }
 
     private func idleSeconds() -> TimeInterval {
-        // CGEventSource.secondsSinceLastEventType: .combinedSessionState
+        // hidSystemState + kCGAnyInputEventType (0xFFFFFFFF) = standard idle time.
         let t = CGEventSource.secondsSinceLastEventType(
-            .combinedSessionState,
-            eventType: CGEventType(rawValue: ~0) ?? .null)
-        return t.isFinite ? t : 0
+            .hidSystemState,
+            eventType: CGEventType(rawValue: 0xFFFFFFFF) ?? .null)
+        return t.isFinite && t >= 0 ? t : 0
+    }
+
+    private func note(_ s: String) {
+        DispatchQueue.main.async { self.status = s }
     }
 
     private func capture() {
-        if Thread.isMainThread { queue.async { self.capture() }; return }
-        if paused { return }
-        if idleSeconds() > idleThreshold { return } // user away -> save battery+disk
+        if paused { note("đang tạm dừng"); return }
 
-        guard CGPreflightScreenCaptureAccess() else { return }
-        guard let img = CGDisplayCreateImage(CGMainDisplayID()) else { return }
+        let granted = CGPreflightScreenCaptureAccess()
+        DispatchQueue.main.async { self.permissionGranted = granted }
+        guard granted else { note("chưa có quyền Screen Recording"); return }
+
+        let idle = idleSeconds()
+        guard idle <= idleThreshold else {
+            note("máy đang nghỉ (\(Int(idle / 60))p không dùng) — bỏ qua")
+            return
+        }
+
+        guard let img = CGDisplayCreateImage(CGMainDisplayID()) else {
+            note("không chụp được màn hình"); return
+        }
         let small = downscale(img, maxWidth: 1280)
-        guard let jpg = jpegData(of: small, quality: 0.45) else { return }
+        guard let jpg = jpegData(of: small, quality: 0.45) else {
+            note("không nén được ảnh"); return
+        }
 
-        // Skip duplicates: same pixels as last shot -> just touch nothing.
-        let hash = String(Insecure.MD5.hash(data: jpg).prefix(8).map { String(format: "%02x", $0) }.joined())
-        if hash == lastHash { return }
+        // Skip duplicates: same pixels as last shot -> save disk + battery.
+        let digest = Insecure.MD5.hash(data: jpg)
+        let hash = digest.map { String(format: "%02x", $0) }.joined()
+        if hash == lastHash { note("màn hình không đổi — bỏ qua"); return }
         lastHash = hash
 
+        let now = Date()
         let url = ShotStore.dir.appendingPathComponent(
-            ShotStore.fmt.string(from: Date()) + ".jpg")
-        try? jpg.write(to: url)
+            ShotStore.fmt.string(from: now) + ".jpg")
+        do {
+            try jpg.write(to: url)
+        } catch {
+            note("không ghi được file: \(error.localizedDescription)")
+            return
+        }
         DispatchQueue.main.async {
-            self.lastShotDate = Date()
-            self.shotCount24h = ShotStore.list().filter {
-                $0.date > Date().addingTimeInterval(-86400)
-            }.count
+            self.lastShotDate = now
+            self.status = "đã chụp lúc \(ShotStore.fmt.string(from: now).replacingOccurrences(of: "_", with: " "))"
         }
         // Opportunistic cleanup once per capture.
         ShotStore.cleanup()

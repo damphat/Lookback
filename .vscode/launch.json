@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Lookback}",
+            "name": "Debug Lookback",
+            "target": "Lookback",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug Lookback"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Lookback}",
+            "name": "Release Lookback",
+            "target": "Lookback",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release Lookback"
+        }
+    ]
+}

@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct LookbackApp: App {
-    @StateObject private var cap = CaptureService()
+    @StateObject private var cap = CaptureService.shared
 
     var body: some Scene {
         Window("Lookback", id: "main") {
@@ -16,11 +16,22 @@ struct LookbackApp: App {
         }
 
         MenuBarExtra("Lookback", systemImage: "clock.arrow.circlepath") {
-            Button("Mở cửa sổ Lookback") { NSApp.activate(ignoringOtherApps: true) }
-            Button(cap.paused ? "Tiếp tục chụp" : "Tạm dừng chụp") { cap.paused.toggle() }
-            Divider()
-            Button("Thoát") { NSApplication.shared.terminate(nil) }
+            MenuBarMenu().environmentObject(cap)
         }
         .menuBarExtraStyle(.menu)
+    }
+}
+
+/// Menu-bar dropdown. Uses openWindow so "Mở cửa sổ" really reopens
+/// the window even after the user closed it (activate() alone can't).
+struct MenuBarMenu: View {
+    @EnvironmentObject var cap: CaptureService
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Button("Mở cửa sổ Lookback") { openWindow(id: "main") }
+        Button(cap.paused ? "Tiếp tục chụp" : "Tạm dừng chụp") { cap.paused.toggle() }
+        Divider()
+        Button("Thoát") { NSApplication.shared.terminate(nil) }
     }
 }

@@ -5,6 +5,7 @@ let package = Package(
     name: "Lookback",
     platforms: [.macOS(.v13)],
     targets: [
-        .executableTarget(name: "Lookback", path: "Sources/Lookback")
+        .executableTarget(name: "Lookback", path: "Sources/Lookback"),
+        .testTarget(name: "LookbackTests", dependencies: ["Lookback"], path: "Tests/LookbackTests")
     ]
 )

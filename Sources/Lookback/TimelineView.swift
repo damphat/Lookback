@@ -15,6 +15,22 @@ struct TimelineView: View {
 
     var body: some View {
         VStack(spacing: 10) {
+            // Permission banner (no auto-prompt: the OS dialog appears
+            // ONLY when the user taps "Cấp quyền").
+            if !cap.permissionGranted {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.yellow)
+                    Text("Chưa có quyền Screen Recording nên chưa chụp được ảnh.")
+                        .font(.callout)
+                    Spacer()
+                    Button("Cấp quyền…") { cap.requestPermission() }
+                    Button("Kiểm tra lại") { cap.refreshPermission(); reload() }
+                }
+                .padding(8)
+                .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+            }
+
             // A. Image (grows with window, fullscreen-capable)
             ZStack(alignment: .bottomLeading) {
                 RoundedRectangle(cornerRadius: 10)
@@ -43,12 +59,16 @@ struct TimelineView: View {
             }
             .frame(minHeight: 300)
 
-            // B. Activity strip: thumbnail per 30-min cell, aligned full-width with slider.
-            HStack(spacing: 2) {
-                ForEach(0..<cells, id: \.self) { i in
-                    cellView(i)
-                        .onTapGesture { fraction = Double(i) / Double(cells - 1); refresh() }
-                        .help(timeLabel(for: cellStart(i)))
+            // B. Activity strip: fixed-width thumbnail cells, aligned with slider.
+            GeometryReader { geo in
+                let w = (geo.size.width - CGFloat(cells - 1) * 2) / CGFloat(cells)
+                HStack(spacing: 2) {
+                    ForEach(0..<cells, id: \.self) { i in
+                        cellView(i)
+                            .frame(width: w, height: 28)
+                            .onTapGesture { fraction = Double(i) / Double(cells - 1); refresh() }
+                            .help(timeLabel(for: cellStart(i)))
+                    }
                 }
             }
             .frame(height: 28)
@@ -64,6 +84,16 @@ struct TimelineView: View {
                     Text("bây giờ").font(.caption).foregroundStyle(.secondary)
                 }
             }
+
+            // D. One slim status line (was 3 rows of buttons).
+            HStack {
+                Circle()
+                    .fill(cap.paused ? .orange : (cap.permissionGranted ? .green : .red))
+                    .frame(width: 8, height: 8)
+                Text(cap.status).font(.caption).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .frame(minWidth: 640, minHeight: 520)
@@ -78,13 +108,13 @@ struct TimelineView: View {
                 .help("Tạm dừng / tiếp tục chụp màn hình")
                 Menu {
                     Button("Mở thư mục ảnh") { NSWorkspace.shared.open(ShotStore.dir) }
-                    Button("Làm mới") { reload() }
+                    Button("Làm mới") { cap.refreshPermission(); reload() }
                 } label: {
                     Label("Thêm", systemImage: "ellipsis.circle")
                 }
             }
         }
-        .onAppear { reload(); requestPermissionIfNeeded(); cap.start() }
+        .onAppear { reload(); cap.start() }
     }
 
     // MARK: - Cells
@@ -101,24 +131,22 @@ struct TimelineView: View {
     @ViewBuilder
     private func cellView(_ i: Int) -> some View {
         let isActive = Int(round(fraction * Double(cells - 1))) == i
-        if let s = repShot(i), let t = ThumbCache.thumb(for: s) {
-            Image(nsImage: t)
-                .resizable().aspectRatio(contentMode: .fill)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 3))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 3)
-                        .stroke(isActive ? Color.accentColor : .clear, lineWidth: 2)
-                )
-        } else {
-            RoundedRectangle(cornerRadius: 3)
-                .fill(Color(nsColor: .separatorColor).opacity(0.5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 3)
-                        .stroke(isActive ? Color.accentColor : .clear, lineWidth: 2)
-                )
+        ZStack {
+            if let s = repShot(i), let t = ThumbCache.thumb(for: s) {
+                Image(nsImage: t)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color(nsColor: .separatorColor).opacity(0.5)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .overlay(
+            RoundedRectangle(cornerRadius: 3)
+                .stroke(isActive ? Color.accentColor : .clear, lineWidth: 2)
+        )
     }
 
     // MARK: - Helpers
@@ -154,11 +182,5 @@ struct TimelineView: View {
 
     private func timeLabel(for d: Date) -> String {
         let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: d)
-    }
-
-    private func requestPermissionIfNeeded() {
-        if !CGPreflightScreenCaptureAccess() {
-            CGRequestScreenCaptureAccess()
-        }
     }
 }
