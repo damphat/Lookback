@@ -7,6 +7,7 @@ APP=dist/Lookback.app
 rm -rf dist
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+cp Resources/Lookback.icns "$APP/Contents/Resources/Lookback.icns"
 cp .build/release/Lookback "$APP/Contents/MacOS/Lookback"
 echo "OK: $APP"
 echo "Chạy: open $APP"
