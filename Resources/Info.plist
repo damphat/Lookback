@@ -8,7 +8,7 @@
     <key>CFBundleVersion</key><string>1.0</string>
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>LSUIElement</key><true/>
+    <key>LSUIElement</key><false/>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSScreenCaptureDescription</key><string>Lookback chụp màn hình mỗi phút để bạn xem lại mình đã làm gì.</string>
 </dict>

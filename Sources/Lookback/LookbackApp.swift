@@ -5,12 +5,22 @@ struct LookbackApp: App {
     @StateObject private var cap = CaptureService()
 
     var body: some Scene {
-        MenuBarExtra("Lookback", systemImage: "clock.arrow.circlepath") {
+        Window("Lookback", id: "main") {
             TimelineView().environmentObject(cap)
-            Divider()
+        }
+        .windowResizability(.contentMinSize)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button(cap.paused ? "Tiếp tục chụp" : "Tạm dừng chụp") { cap.paused.toggle() }
+            }
+        }
+
+        MenuBarExtra("Lookback", systemImage: "clock.arrow.circlepath") {
+            Button("Mở cửa sổ Lookback") { NSApp.activate(ignoringOtherApps: true) }
             Button(cap.paused ? "Tiếp tục chụp" : "Tạm dừng chụp") { cap.paused.toggle() }
+            Divider()
             Button("Thoát") { NSApplication.shared.terminate(nil) }
         }
-        .menuBarExtraStyle(.window)
+        .menuBarExtraStyle(.menu)
     }
 }
