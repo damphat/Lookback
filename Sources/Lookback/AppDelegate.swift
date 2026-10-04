@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Agent-style app: no Dock icon (LSUIElement), no window at launch.
 /// Left-click tray icon = open + raise window, right-click = menu.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let cap = CaptureService.shared
     private var statusItem: NSStatusItem!
     private var windowController: NSWindowController?
@@ -50,6 +50,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func togglePause() { cap.paused.toggle() }
     @objc private func quitApp() { NSApplication.shared.terminate(nil) }
 
+    /// Window closed -> release everything (timers die with the view,
+    /// thumbnails freed). Capture keeps running; reopening starts fresh.
+    func windowWillClose(_ notification: Notification) {
+        windowController = nil
+    }
+
     /// Open the window if closed, raise + focus it if buried.
     @objc func showWindow() {
         if windowController == nil {
@@ -61,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             win.setContentSize(NSSize(width: 700, height: 600))
             win.minSize = NSSize(width: 560, height: 480)
             win.isReleasedWhenClosed = false
+            win.delegate = self
             windowController = NSWindowController(window: win)
         }
         NSApp.activate(ignoringOtherApps: true)

@@ -9,6 +9,7 @@ struct TimelineView: View {
     @State private var image: NSImage?
     @State private var caption = ""
     @State private var isEmpty = false
+    @State private var scrubbing = false
 
     private let span: TimeInterval = 24 * 3600
     private let cells = 48
@@ -31,8 +32,9 @@ struct TimelineView: View {
                 .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             }
 
-            // A. Image (grows with window, fullscreen-capable)
-            ZStack(alignment: .bottomLeading) {
+            // A. Image (grows with window, fullscreen-capable) with big
+            // centered time overlay: large time-of-day, small date, relative age.
+            ZStack {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(Color(nsColor: .windowBackgroundColor))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -48,13 +50,39 @@ struct TimelineView: View {
                             }
                         }
                     }
-                if image != nil {
-                    Text(caption)
-                        .font(.caption.monospaced())
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(.black.opacity(0.6), in: Capsule())
+                if scrubbing {
+                    // Full overlay only while dragging: big time, small date,
+                    // relative age. Dims the photo so text always reads well.
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(.black.opacity(image != nil ? 0.25 : 0))
+                    VStack(spacing: 2) {
+                        Text(dateString(for: selectedDate()))
+                            .font(.headline)
+                        Text(timeString(for: selectedDate()))
+                            .font(.system(size: 64, weight: .bold, design: .rounded))
+                        Text(relativeLabel())
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(.white)
+                    .shadow(radius: 4)
+                    .padding(.horizontal, 24).padding(.vertical, 12)
+                    .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 16))
+                } else {
+                    // Idle: one small pill, bottom-left, out of the way.
+                    HStack {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text("\(timeString(for: selectedDate())) • \(relativeLabel())")
+                                .font(.callout).bold()
+                            Text(dateString(for: selectedDate()))
+                                .font(.caption)
+                        }
                         .foregroundStyle(.white)
-                        .padding(8)
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .padding(10)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 }
             }
             .frame(minHeight: 300)
@@ -75,7 +103,8 @@ struct TimelineView: View {
 
             // C. Slider full width, labels below so both ends align with the strip.
             VStack(spacing: 2) {
-                Slider(value: $fraction, in: 0...1).onChange(of: fraction) { _ in refresh() }
+                Slider(value: $fraction, in: 0...1, onEditingChanged: { scrubbing = $0 })
+                    .onChange(of: fraction) { _ in refresh() }
                 HStack {
                     Text("−24h").font(.caption).foregroundStyle(.secondary)
                     Spacer()
@@ -85,13 +114,16 @@ struct TimelineView: View {
                 }
             }
 
-            // D. One slim status line (was 3 rows of buttons).
+            // D. Bottom line describes the SELECTED moment (moves with the
+            // slider), never the capture engine — no more mystery numbers.
             HStack {
                 Circle()
                     .fill(cap.paused ? .orange : (cap.permissionGranted ? .green : .red))
                     .frame(width: 8, height: 8)
-                Text(cap.status).font(.caption).foregroundStyle(.secondary)
+                Text(viewedLine()).font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
+                Spacer()
+                Text("\(shots.count) ảnh / 24h").font(.caption).foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -106,15 +138,20 @@ struct TimelineView: View {
                           systemImage: cap.paused ? "play.fill" : "pause.fill")
                 }
                 .help("Tạm dừng / tiếp tục chụp màn hình")
-                Menu {
-                    Button("Mở thư mục ảnh") { NSWorkspace.shared.open(ShotStore.dir) }
-                    Button("Làm mới") { cap.refreshPermission(); reload() }
+                Button {
+                    NSWorkspace.shared.open(ShotStore.dir)
                 } label: {
-                    Label("Thêm", systemImage: "ellipsis.circle")
+                    Label("Mở thư mục ảnh", systemImage: "folder")
                 }
+                .help("Mở thư mục chứa ảnh chụp")
             }
         }
+        // Disk is scanned only at meaningful moments (window opens / regains
+        // focus). In between, the view works purely from the cached list.
         .onAppear { reload(); cap.start() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            reload(keepPosition: true)
+        }
     }
 
     // MARK: - Cells
@@ -170,10 +207,34 @@ struct TimelineView: View {
         }
     }
 
-    private func reload() {
+    private func reload(keepPosition: Bool = false) {
         shots = ShotStore.list().filter { $0.date > Date().addingTimeInterval(-span) }
-        if shots.isEmpty { image = nil; caption = "Chưa có ảnh nào — app sẽ chụp mỗi phút khi bạn dùng máy."; isEmpty = true }
-        else { fraction = 1.0; refresh() }
+        if shots.isEmpty {
+            image = nil
+            caption = "Chưa có ảnh nào — app sẽ chụp mỗi phút khi bạn dùng máy."
+            isEmpty = true
+        } else {
+            if !keepPosition { fraction = 1.0 }
+            refresh()
+        }
+    }
+
+    private func timeString(for d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: d)
+    }
+
+    private func dateString(for d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "EEEE, dd/MM/yyyy"; f.locale = Locale(identifier: "vi_VN")
+        return f.string(from: d).capitalized
+    }
+
+    /// Bottom line: always about the moment being viewed (follows slider).
+    private func viewedLine() -> String {
+        let t = selectedDate()
+        if isEmpty {
+            return "Máy nghỉ lúc \(timeString(for: t)) — không có ảnh"
+        }
+        return "Đang xem ảnh lúc \(caption) • \(relativeLabel())"
     }
 
     private func relativeLabel() -> String {

@@ -13,10 +13,7 @@ final class CaptureService: ObservableObject {
     static let shared = CaptureService()
 
     @Published var paused = false
-    @Published var lastShotDate: Date?
     @Published var permissionGranted = CGPreflightScreenCaptureAccess()
-    /// Human-readable reason for the last capture outcome (for the status line).
-    @Published var status = "—"
 
     private var timer: Timer?
     private var lastHash = ""
@@ -63,50 +60,28 @@ final class CaptureService: ObservableObject {
         return t.isFinite && t >= 0 ? t : 0
     }
 
-    private func note(_ s: String) {
-        DispatchQueue.main.async { self.status = s }
-    }
-
     private func capture() {
-        if paused { note("đang tạm dừng"); return }
+        if paused { return }
 
         let granted = CGPreflightScreenCaptureAccess()
         DispatchQueue.main.async { self.permissionGranted = granted }
-        guard granted else { note("chưa có quyền Screen Recording"); return }
+        guard granted else { return }
+        guard idleSeconds() <= idleThreshold else { return } // user away
 
-        let idle = idleSeconds()
-        guard idle <= idleThreshold else {
-            note("máy đang nghỉ (\(Int(idle / 60))p không dùng) — bỏ qua")
-            return
-        }
-
-        guard let img = CGDisplayCreateImage(CGMainDisplayID()) else {
-            note("không chụp được màn hình"); return
-        }
+        guard let img = CGDisplayCreateImage(CGMainDisplayID()) else { return }
         let small = downscale(img, maxWidth: 1280)
-        guard let jpg = jpegData(of: small, quality: 0.45) else {
-            note("không nén được ảnh"); return
-        }
+        guard let jpg = jpegData(of: small, quality: 0.45) else { return }
 
         // Skip duplicates: same pixels as last shot -> save disk + battery.
         let digest = Insecure.MD5.hash(data: jpg)
         let hash = digest.map { String(format: "%02x", $0) }.joined()
-        if hash == lastHash { note("màn hình không đổi — bỏ qua"); return }
+        if hash == lastHash { return }
         lastHash = hash
 
         let now = Date()
         let url = ShotStore.dir.appendingPathComponent(
             ShotStore.fmt.string(from: now) + ".jpg")
-        do {
-            try jpg.write(to: url)
-        } catch {
-            note("không ghi được file: \(error.localizedDescription)")
-            return
-        }
-        DispatchQueue.main.async {
-            self.lastShotDate = now
-            self.status = "đã chụp lúc \(ShotStore.fmt.string(from: now).replacingOccurrences(of: "_", with: " "))"
-        }
+        try? jpg.write(to: url)
         // Opportunistic cleanup once per capture.
         ShotStore.cleanup()
     }
