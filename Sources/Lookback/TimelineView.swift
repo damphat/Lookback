@@ -64,7 +64,7 @@ struct TimelineView: View {
                 let w = (geo.size.width - CGFloat(cells - 1) * 2) / CGFloat(cells)
                 HStack(spacing: 2) {
                     ForEach(0..<cells, id: \.self) { i in
-                        cellView(i)
+                        cellView(i, width: w)
                             .frame(width: w, height: 28)
                             .onTapGesture { fraction = Double(i) / Double(cells - 1); refresh() }
                             .help(timeLabel(for: cellStart(i)))
@@ -129,19 +129,22 @@ struct TimelineView: View {
     }
 
     @ViewBuilder
-    private func cellView(_ i: Int) -> some View {
+    private func cellView(_ i: Int, width w: CGFloat) -> some View {
         let isActive = Int(round(fraction * Double(cells - 1))) == i
-        ZStack {
+        // Explicit content size + clipped: the image can never bleed
+        // into neighbouring cells regardless of its aspect ratio.
+        Group {
             if let s = repShot(i), let t = ThumbCache.thumb(for: s) {
                 Image(nsImage: t)
                     .resizable()
                     .scaledToFill()
+                    .frame(width: w, height: 28)
+                    .clipped()
             } else {
                 Color(nsColor: .separatorColor).opacity(0.5)
+                    .frame(width: w, height: 28)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .clipped()
         .clipShape(RoundedRectangle(cornerRadius: 3))
         .overlay(
             RoundedRectangle(cornerRadius: 3)

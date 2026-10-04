@@ -1,0 +1,69 @@
+import AppKit
+import SwiftUI
+
+/// Agent-style app: no Dock icon (LSUIElement), no window at launch.
+/// Left-click tray icon = open + raise window, right-click = menu.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let cap = CaptureService.shared
+    private var statusItem: NSStatusItem!
+    private var windowController: NSWindowController?
+
+    func applicationDidFinishLaunching(_ note: Notification) {
+        cap.start()
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = statusItem.button {
+            button.image = NSImage(
+                systemSymbolName: "clock.arrow.circlepath",
+                accessibilityDescription: "Lookback")
+            button.target = self
+            button.action = #selector(handleClick(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        }
+    }
+
+    @objc private func handleClick(_ sender: NSStatusBarButton) {
+        guard let event = NSApp.currentEvent else { showWindow(); return }
+        if event.type == .rightMouseUp {
+            statusItem.popUpMenu(trayMenu())
+        } else {
+            showWindow()
+        }
+    }
+
+    private func trayMenu() -> NSMenu {
+        let menu = NSMenu()
+        let open = NSMenuItem(title: "Mở cửa sổ Lookback", action: #selector(showWindowFromMenu), keyEquivalent: "")
+        open.target = self
+        menu.addItem(open)
+        let pauseTitle = cap.paused ? "Tiếp tục chụp" : "Tạm dừng chụp"
+        let pause = NSMenuItem(title: pauseTitle, action: #selector(togglePause), keyEquivalent: "")
+        pause.target = self
+        menu.addItem(pause)
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "Thoát", action: #selector(quitApp), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
+        return menu
+    }
+
+    @objc private func showWindowFromMenu() { showWindow() }
+    @objc private func togglePause() { cap.paused.toggle() }
+    @objc private func quitApp() { NSApplication.shared.terminate(nil) }
+
+    /// Open the window if closed, raise + focus it if buried.
+    @objc func showWindow() {
+        if windowController == nil {
+            let host = NSHostingController(
+                rootView: TimelineView().environmentObject(cap))
+            let win = NSWindow(contentViewController: host)
+            win.title = "Lookback"
+            win.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            win.setContentSize(NSSize(width: 700, height: 600))
+            win.minSize = NSSize(width: 560, height: 480)
+            win.isReleasedWhenClosed = false
+            windowController = NSWindowController(window: win)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        windowController?.window?.makeKeyAndOrderFront(nil)
+    }
+}
