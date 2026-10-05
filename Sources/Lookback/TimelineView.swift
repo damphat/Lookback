@@ -202,9 +202,14 @@ struct TimelineView: View {
 
     private func selectedDate() -> Date { Date().addingTimeInterval(-span + fraction * span) }
 
+    /// Currently viewed shot (follows the slider), for the bottom line.
+    private func viewedShot() -> ShotStore.Shot? {
+        ShotStore.nearest(to: selectedDate(), in: shots)
+    }
+
     private func refresh() {
         let t = selectedDate()
-        if let s = ShotStore.nearest(to: t, in: shots) {
+        if let s = viewedShot() {
             image = NSImage(contentsOf: s.url)
             caption = ShotStore.fmt.string(from: s.date).replacingOccurrences(of: "_", with: " ")
             isEmpty = false
@@ -243,7 +248,15 @@ struct TimelineView: View {
         if isEmpty {
             return "Máy nghỉ lúc \(timeString(for: t)) — không có ảnh"
         }
-        return "Đang xem ảnh lúc \(caption) • \(relativeLabel())"
+        var parts = ["Đang xem ảnh lúc \(caption)"]
+        if let s = viewedShot() {
+            var ctx: [String] = []
+            if let a = s.app { ctx.append(a) }
+            if let d = s.detail { ctx.append(d) }
+            if !ctx.isEmpty { parts.append(ctx.joined(separator: " • ")) }
+        }
+        parts.append(relativeLabel())
+        return parts.joined(separator: " • ")
     }
 
     private func relativeLabel() -> String {

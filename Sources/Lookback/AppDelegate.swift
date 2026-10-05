@@ -79,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func showWindow() {
         if windowController == nil {
             let host = NSHostingController(
-                rootView: TimelineView().environmentObject(cap))
+                rootView: MainView().environmentObject(cap))
             let win = NSWindow(contentViewController: host)
             win.title = "Lookback"
             win.styleMask = [.titled, .closable, .miniaturizable, .resizable]

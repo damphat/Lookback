@@ -21,7 +21,10 @@ qua trên một timeline trực quan.
 - **Tự bảo vệ user:** chưa cấp quyền Screen Recording thì app tự bung cửa sổ
   báo ngay, không bao giờ hỏi xin quyền một cách tự động và spam.
 - **Lưu trữ gọn:** ảnh JPG ở `~/.lookback/`, tên theo
-  `YYYY-MM-DD_HH-mm-ss.jpg`, tự xóa file quá 7 ngày.
+  `YYYY-MM-DD_HH-mm-ss[__app[__detail]].jpg` (Chrome → domain, VSCode →
+  tên folder), tự xóa file quá 7 ngày.
+- **Thống kê ngày:** tab riêng sort app theo số ảnh (≈ thời gian dùng),
+  bung ra xem chi tiết từng website/folder.
 - Đóng cửa sổ là dọn sạch viewer (timer, thumbnail); chụp nền vẫn chạy.
 
 ## Cài đặt & chạy

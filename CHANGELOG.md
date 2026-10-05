@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1 — 2026-10-06
+
+- Tên file 3 phần `timestamp__app__detail.jpg` (app/detail optional, file cũ
+  vẫn đọc được): Chrome ghi thêm domain tab đang mở, VSCode ghi thêm tên
+  folder project. Lấy context thất bại thì về tên timestamp-only như cũ.
+- Tab "Thống kê": app trong ngày sort theo số ảnh (≈ số phút dùng), bung ra
+  xem chi tiết từng website/folder. Dòng bottom timeline cũng hiện app •
+  detail của ảnh đang xem.
+
 ## 1.0 — 2026-10-05
 
 Bản đầu tiên dùng được hàng ngày.

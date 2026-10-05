@@ -79,8 +79,11 @@ final class CaptureService: ObservableObject {
         lastHash = hash
 
         let now = Date()
+        // Best-effort context (frontmost app + Chrome domain / VSCode
+        // folder). Nil parts are dropped, degrading to timestamp-only.
+        let ctx = ActiveContext.current()
         let url = ShotStore.dir.appendingPathComponent(
-            ShotStore.fmt.string(from: now) + ".jpg")
+            ShotStore.filename(for: now, app: ctx.app, detail: ctx.detail))
         try? jpg.write(to: url)
         // Opportunistic cleanup once per capture.
         ShotStore.cleanup()
