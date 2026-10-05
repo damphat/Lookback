@@ -2,14 +2,34 @@ import AppKit
 import CoreGraphics
 import SwiftUI
 
+/// Pure quit policy, testable without NSApp: default-deny, opened only by
+/// the tray "Thoát" item or by macOS ending the session.
+struct QuitGate {
+    var allowQuit = false
+    var systemShutdown = false
+    var shouldTerminate: Bool { allowQuit || systemShutdown }
+}
+
 /// Agent-style app: no Dock icon (LSUIElement), no window at launch.
 /// Left-click tray icon = open + raise window, right-click = menu.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let cap = CaptureService.shared
     private var statusItem: NSStatusItem!
     private var windowController: NSWindowController?
+    /// Quit gate: only the tray "Thoát" item opens it. Everything else that
+    /// asks to quit (accidental Cmd+Q) is vetoed; real logout/restart/
+    /// shutdown still goes through.
+    private var quitGate = QuitGate()
+
+    /// Cmd+Q lands here with no main-menu item to strip (LSUIElement app).
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        quitGate.shouldTerminate ? .terminateNow : .terminateCancel
+    }
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(noteShutdown),
+            name: NSWorkspace.willPowerOffNotification, object: nil)
         cap.start()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
@@ -67,7 +87,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         NSApp.orderFrontStandardAboutPanel(nil)
     }
-    @objc private func quitApp() { NSApplication.shared.terminate(nil) }
+    /// The ONLY user path that quits the app: right-click tray → Thoát.
+    @objc private func quitApp() {
+        quitGate.allowQuit = true
+        NSApplication.shared.terminate(nil)
+    }
+
+    @objc private func noteShutdown() { quitGate.systemShutdown = true }
 
     /// Window closed -> release everything (timers die with the view,
     /// thumbnails freed). Capture keeps running; reopening starts fresh.
