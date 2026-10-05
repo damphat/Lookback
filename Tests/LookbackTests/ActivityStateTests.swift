@@ -130,7 +130,4 @@ final class ActivityStateTests: XCTestCase {
         assertTiles(regs, from: st.from, to: st.to)
     }
 
-    func testChildColoursDistinct() {
-        XCTAssertNotEqual(ActivityState.hue(for: "Lookback"), ActivityState.hue(for: "Clock"))
-    }
 }

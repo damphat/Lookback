@@ -31,7 +31,8 @@ struct AppActivityBar: View {
             GeometryReader { geo in
                 let w = max(1, geo.size.width)
                 ZStack(alignment: .bottomLeading) {
-                    // Single-pass draw: track + all regions + children + ticks.
+                    // Single-pass draw: track + regions + children + labels.
+                    // (The time axis lives in TimeRuler below, not here.)
                     Canvas { ctx, size in
                         let h = barHeight
                         ctx.fill(Path(roundedRect: CGRect(x: 0, y: 0, width: size.width, height: h),
@@ -45,28 +46,25 @@ struct AppActivityBar: View {
                                 ctx.fill(Path(roundedRect: rect, cornerRadius: 5),
                                          with: .color(Color(nsColor: .separatorColor).opacity(isHovered(r) ? 0.7 : 0.45)))
                             } else {
-                                if case .app(let app) = r.kind {
-                                    ctx.fill(Path(roundedRect: rect, cornerRadius: 5),
-                                             with: .color(AppActivityBarModel.color(for: app).opacity(isHovered(r) ? 1.0 : 0.72)))
-                                }
-                                // Level-2: shorter inner blocks, one distinct
-                                // colour per detail, tiling edge-to-edge.
-                                for c in r.children {
+                                let app = r.kind.appName ?? "?"
+                                ctx.fill(Path(roundedRect: rect, cornerRadius: 5),
+                                         with: .color(AppPalette.color(for: app).opacity(isHovered(r) ? 1.0 : 0.72)))
+                                drawCellLabel(minutes: r.minutes, in: rect, ctx: &ctx)
+                                // Level-2: slim sibling shades of the app colour
+                                // (distinct by index, never hash-collided),
+                                // inset 1px so neighbours don't touch.
+                                for (i, c) in r.children.enumerated() {
                                     let cx = frac(c.start) * size.width
-                                    let cw = max(2, frac(c.end) * size.width - cx)
-                                    ctx.fill(Path(roundedRect: CGRect(x: cx, y: h * 0.52, width: cw, height: h * 0.48), cornerRadius: 3),
-                                             with: .color(AppActivityBarModel.color(for: c.detail)))
+                                    let cw = frac(c.end) * size.width - cx
+                                    guard cw > 3 else { continue }
+                                    ctx.fill(Path(roundedRect: CGRect(x: cx + 1, y: h * 0.64, width: cw - 2, height: h * 0.32), cornerRadius: 2),
+                                             with: .color(AppPalette.shade(app: app, index: i)))
                                 }
                             }
                             if isHovered(r) {
                                 ctx.stroke(Path(roundedRect: rect, cornerRadius: 5),
                                            with: .color(.white.opacity(0.85)), lineWidth: 1.5)
                             }
-                        }
-                        for t in AppActivityBarModel.ticks(from: state.from, to: state.to) {
-                            let x = frac(t) * size.width
-                            ctx.fill(Path(CGRect(x: x, y: 0, width: 1, height: h)),
-                                     with: .color(Color(nsColor: .separatorColor)))
                         }
                     }
                     .frame(height: barHeight)
@@ -96,14 +94,16 @@ struct AppActivityBar: View {
                 }
             }
             .frame(height: barHeight)
-            HStack {
-                Text(Self.timeFmt.string(from: state.from)); Spacer()
-                Text(Self.timeFmt.string(from: Date(timeIntervalSince1970: (state.from.timeIntervalSince1970 + state.to.timeIntervalSince1970) / 2)))
-                Spacer()
-                Text(abs(state.to.timeIntervalSinceNow) < 300 ? "bây giờ" : Self.timeFmt.string(from: state.to))
-            }
-            .font(.caption).foregroundStyle(.secondary)
+            TimeRuler(from: state.from, to: state.to)
         }
+    }
+
+    /// Duration only (users learn apps by colour): small type centred on the
+    /// cell's top half so it shows even on narrow cells. No room → no label.
+    private func drawCellLabel(minutes: Int, in rect: CGRect, ctx: inout GraphicsContext) {
+        guard rect.width >= 40 else { return }
+        ctx.draw(Text(TimeText.short(minutes)).font(.system(size: 10, weight: .semibold)).foregroundColor(.white.opacity(0.92)),
+                 at: CGPoint(x: rect.midX, y: rect.minY + barHeight * 0.26), anchor: .center)
     }
 
     // MARK: - Cached lookups (no state rebuild)
@@ -170,7 +170,7 @@ struct AppActivityBar: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Máy nghỉ").font(.headline)
                         if let r {
-                            Text("\(Self.timeFmt.string(from: r.start)) → \(Self.timeFmt.string(from: r.end)) • \(r.minutes) phút • 0 ảnh")
+                            Text("\(Self.timeFmt.string(from: r.start)) → \(Self.timeFmt.string(from: r.end)) • \(TimeText.long(r.minutes)) • 0 ảnh")
                                 .font(.caption).foregroundStyle(.secondary)
                         } else {
                             Text("Ngoài khung giờ • 0 ảnh").font(.caption).foregroundStyle(.secondary)
@@ -179,19 +179,18 @@ struct AppActivityBar: View {
                     Spacer()
                 }
             case .app(let s, let r):
+                let app = r.kind.appName ?? "?"
                 HStack(spacing: 6) {
-                    if case .app(let app) = r.kind {
-                        Circle().fill(AppActivityBarModel.color(for: app)).frame(width: 10, height: 10)
-                        Text(app).font(.headline).lineLimit(1)
-                    }
+                    Circle().fill(AppPalette.color(for: app)).frame(width: 10, height: 10)
+                    Text(app).font(.headline).lineLimit(1)
                     Spacer()
                     Text("\(r.count) ảnh").font(.caption).foregroundStyle(.secondary)
                 }
-                Text("\(Self.timeFmt.string(from: r.start)) → \(Self.timeFmt.string(from: r.end)) • \(r.minutes) phút")
+                Text("\(Self.timeFmt.string(from: r.start)) → \(Self.timeFmt.string(from: r.end)) • \(TimeText.long(r.minutes))")
                     .font(.caption).foregroundStyle(.secondary)
-                ForEach(r.children.prefix(5), id: \.detail) { c in
+                ForEach(Array(r.children.prefix(5).enumerated()), id: \.element.detail) { i, c in
                     HStack(spacing: 6) {
-                        Circle().fill(AppActivityBarModel.color(for: c.detail)).frame(width: 8, height: 8)
+                        Circle().fill(AppPalette.shade(app: app, index: i)).frame(width: 8, height: 8)
                         Text(c.detail).font(.caption).lineLimit(1)
                         Spacer()
                         Text("\(c.count) ảnh").font(.caption).foregroundStyle(.secondary)
@@ -214,28 +213,6 @@ struct AppActivityBar: View {
         .frame(width: 236, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
         .shadow(radius: 8)
-    }
-}
-
-// MARK: - Geometry helpers (view math only; rules live in ActivityState)
-
-enum AppActivityBarModel {
-    static func hue(for app: String) -> Double { ActivityState.hue(for: app) }
-    static func color(for app: String) -> Color {
-        Color(hue: hue(for: app), saturation: 0.55, brightness: 0.85)
-    }
-    static func ticks(from: Date, to: Date) -> [Date] {
-        let spanH = max(1, to.timeIntervalSince(from) / 3600)
-        let stepH = [1, 2, 3, 6, 12, 24].first(where: { spanH / Double($0) <= 8 }) ?? 24
-        var out: [Date] = []
-        var t = Calendar.current.date(bySetting: .minute, value: 0, of: from) ?? from
-        if t < from { t = Calendar.current.date(byAdding: .hour, value: stepH, to: t) ?? from }
-        while t <= to {
-            out.append(t)
-            t = Calendar.current.date(byAdding: .hour, value: stepH, to: t) ?? to.addingTimeInterval(1)
-            if out.count > 24 { break }
-        }
-        return out
     }
 }
 

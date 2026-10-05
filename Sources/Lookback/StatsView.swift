@@ -62,7 +62,7 @@ struct StatsView: View {
                     .font(.headline)
                 Spacer()
                 Text(total > 0
-                     ? "\(total) ảnh ≈ \(total) phút dùng máy"
+                     ? "\(total) ảnh ≈ \(TimeText.long(total)) dùng máy"
                      : "Chưa có ảnh nào trong khung này")
                     .font(.caption).foregroundStyle(.secondary)
             }

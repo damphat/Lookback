@@ -200,9 +200,6 @@ struct TimelineView: View {
     }
 
     private func relativeLabel() -> String {
-        let mins = Int(round(Date().timeIntervalSince(selectedDate) / 60))
-        if mins < 1 { return "hiện tại" }
-        if mins < 60 { return "\(mins) phút trước" }
-        return "\(mins / 60)h\(mins % 60 == 0 ? "" : "\(mins % 60)p") trước"
+        TimeText.ago(Int(round(Date().timeIntervalSince(selectedDate) / 60)))
     }
 }

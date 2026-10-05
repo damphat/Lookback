@@ -24,6 +24,10 @@ struct ActivityState {
     enum Kind: Equatable {
         case sleep
         case app(String)
+        var appName: String? {
+            if case .app(let a) = self { return a }
+            return nil
+        }
     }
 
     struct ChildRegion: Equatable {
@@ -201,14 +205,6 @@ struct ActivityState {
             i += 1
         }
         return best
-    }
-
-    // MARK: - Colours (stable per app, testable as hue)
-
-    static func hue(for app: String) -> Double {
-        var h: UInt64 = 146959
-        for b in app.utf8 { h ^= UInt64(b); h = h &* 1099511628211 }
-        return Double(h % 360) / 360.0
     }
 
     // MARK: - Benchmark helper
