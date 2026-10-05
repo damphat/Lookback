@@ -86,9 +86,11 @@ final class ShotStoreTests: XCTestCase {
         XCTAssertTrue(rows[1].details.isEmpty)
     }
 
-    func testStatsIgnoresOtherDays() {
-        let yesterday = Date().addingTimeInterval(-86400)
-        let shots = [shot(at: yesterday.timeIntervalSince1970, app: "Old")]
-        XCTAssertTrue(AppStats.rows(for: shots).isEmpty)
+    func testStatsScopesToWindow() {
+        let now = Date()
+        let old = [shot(at: now.addingTimeInterval(-86400).timeIntervalSince1970, app: "Old")]
+        let startOfToday = Calendar.current.startOfDay(for: now)
+        XCTAssertTrue(AppStats.rows(for: old, from: startOfToday, to: now).isEmpty)
+        XCTAssertEqual(AppStats.rows(for: old).count, 1)
     }
 }

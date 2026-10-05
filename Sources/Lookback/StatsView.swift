@@ -12,11 +12,13 @@ struct AppStats {
 
     static let unknownApp = "Không rõ app"
 
-    /// Group today's shots by app, each row's details by part 3.
-    static func rows(for shots: [ShotStore.Shot], day: Date = Date()) -> [Row] {
-        let cal = Calendar.current
-        let today = shots.filter { cal.isDate($0.date, inSameDayAs: day) }
-        let byApp = Dictionary(grouping: today) { $0.app ?? unknownApp }
+    /// Group shots by app, each row's details by part 3.
+    /// Pass `from`/`to` to scope to the shared window (nil = everything).
+    static func rows(for shots: [ShotStore.Shot], from: Date? = nil, to: Date? = nil) -> [Row] {
+        let scoped = shots.filter {
+            (from == nil || $0.date >= from!) && (to == nil || $0.date <= to!)
+        }
+        let byApp = Dictionary(grouping: scoped) { $0.app ?? unknownApp }
         return byApp.map { app, ss in
             let det = Dictionary(grouping: ss.compactMap(\.detail)) { $0 }
                 .map { ($0.key, $0.value.count) }
@@ -27,15 +29,19 @@ struct AppStats {
     }
 }
 
-/// Window root: Timeline tab + per-day app usage tab.
+/// Window root: Timeline tab + app usage tab, both scoped to one shared
+/// `TimeScope` chosen in the sidebar (so "6 giờ qua" scopes stats too).
 struct MainView: View {
     @EnvironmentObject var cap: CaptureService
+    @StateObject private var scope = TimeScope()
 
     var body: some View {
         TabView {
             TimelineView()
+                .environmentObject(scope)
                 .tabItem { Label("Timeline", systemImage: "clock") }
             StatsView()
+                .environmentObject(scope)
                 .tabItem { Label("Thống kê", systemImage: "chart.bar") }
         }
         .frame(minWidth: 640, minHeight: 520)
@@ -44,19 +50,20 @@ struct MainView: View {
 
 struct StatsView: View {
     @EnvironmentObject var cap: CaptureService
+    @EnvironmentObject var scope: TimeScope
     @State private var shots: [ShotStore.Shot] = []
 
     var body: some View {
-        let rows = AppStats.rows(for: shots)
+        let rows = AppStats.rows(for: shots, from: scope.from, to: scope.to)
         let total = rows.reduce(0) { $0 + $1.count }
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Hôm nay")
+                Text(scope.preset.rawValue)
                     .font(.headline)
                 Spacer()
                 Text(total > 0
                      ? "\(total) ảnh ≈ \(total) phút dùng máy"
-                     : "Chưa có ảnh nào hôm nay")
+                     : "Chưa có ảnh nào trong khung này")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if rows.isEmpty {
