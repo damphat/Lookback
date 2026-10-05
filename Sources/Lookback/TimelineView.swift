@@ -89,17 +89,24 @@ struct TimelineView: View {
 
             // B. Activity strip: fixed-width thumbnail cells, aligned with slider.
             GeometryReader { geo in
-                let w = (geo.size.width - CGFloat(cells - 1) * 2) / CGFloat(cells)
-                HStack(spacing: 2) {
+                let w = (geo.size.width - CGFloat(cells - 1) * TimelineLayout.cellSpacing) / CGFloat(cells)
+                HStack(spacing: TimelineLayout.cellSpacing) {
                     ForEach(0..<cells, id: \.self) { i in
                         cellView(i, width: w)
-                            .frame(width: w, height: 28)
-                            .onTapGesture { fraction = Double(i) / Double(cells - 1); refresh() }
+                            .frame(width: w, height: TimelineLayout.cellHeight)
+                            // Confine hit-testing to the cell bounds so a
+                            // filled thumbnail can never steal taps from neighbours.
+                            .contentShape(Rectangle())
+                            .clipped()
+                            .onTapGesture {
+                                fraction = TimelineLayout.fraction(forCell: i, cells: cells)
+                                refresh()
+                            }
                             .help(timeLabel(for: cellStart(i)))
                     }
                 }
             }
-            .frame(height: 28)
+            .frame(height: TimelineLayout.cellHeight)
 
             // C. Slider full width, labels below so both ends align with the strip.
             VStack(spacing: 2) {
@@ -167,25 +174,27 @@ struct TimelineView: View {
 
     @ViewBuilder
     private func cellView(_ i: Int, width w: CGFloat) -> some View {
-        let isActive = Int(round(fraction * Double(cells - 1))) == i
+        let isActive = TimelineLayout.cellIndex(forFraction: fraction, cells: cells) == i
         // Explicit content size + clipped: the image can never bleed
         // into neighbouring cells regardless of its aspect ratio.
+        // The stroke is inset so the 2pt ring paints inside the cell
+        // instead of overlapping the neighbour's hit area.
         Group {
             if let s = repShot(i), let t = ThumbCache.thumb(for: s) {
                 Image(nsImage: t)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: w, height: 28)
+                    .frame(width: w, height: TimelineLayout.cellHeight)
                     .clipped()
             } else {
                 Color(nsColor: .separatorColor).opacity(0.5)
-                    .frame(width: w, height: 28)
+                    .frame(width: w, height: TimelineLayout.cellHeight)
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: 3))
+        .clipShape(RoundedRectangle(cornerRadius: TimelineLayout.cellCornerRadius))
         .overlay(
-            RoundedRectangle(cornerRadius: 3)
-                .stroke(isActive ? Color.accentColor : .clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: TimelineLayout.cellCornerRadius)
+                .strokeBorder(isActive ? Color.accentColor : .clear, lineWidth: 2)
         )
     }
 
