@@ -71,26 +71,34 @@ final class ShotStoreTests: XCTestCase {
         XCTAssertEqual(ShotStore.sanitize("a__b/c:d"), "a_b-c-d")
     }
 
-    // MARK: - Stats grouping
+    // MARK: - Time-domain summary
 
-    func testStatsSortsAppsByCountDesc() {
-        let now = Date().timeIntervalSince1970
-        let shots = [shot(at: now, app: "Chrome", detail: "a.com"),
-                     shot(at: now + 60, app: "Xcode"),
-                     shot(at: now + 120, app: "Chrome", detail: "b.com"),
-                     shot(at: now + 180, app: "Chrome", detail: "a.com")]
-        let rows = AppStats.rows(for: shots)
-        XCTAssertEqual(rows.map(\.app), ["Chrome", "Xcode"])
-        XCTAssertEqual(rows[0].details.map { $0.0 }, ["a.com", "b.com"])
-        XCTAssertEqual(rows[0].details.map { $0.1 }, [2, 1])
-        XCTAssertTrue(rows[1].details.isEmpty)
+    private func summaryState(_ shots: [ShotStore.Shot], from: Date, to: Date) -> ActivityState {
+        ActivityState(samples: shots, from: from, to: to)
     }
 
-    func testStatsScopesToWindow() {
+    func testSummarySortsAppsByMinutesDesc() {
+        let now = Date()
+        let shots = [shot(at: now.timeIntervalSince1970, app: "Chrome", detail: "a.com"),
+                     shot(at: now.timeIntervalSince1970 + 60, app: "Xcode"),
+                     shot(at: now.timeIntervalSince1970 + 120, app: "Chrome", detail: "b.com"),
+                     shot(at: now.timeIntervalSince1970 + 180, app: "Chrome", detail: "a.com")]
+        let rows = summaryState(shots, from: now.addingTimeInterval(-300),
+                                to: now.addingTimeInterval(600)).summary()
+        XCTAssertEqual(rows.map(\.app), ["Chrome", "Xcode"])
+        XCTAssertEqual(rows[0].details.map { $0.0 }, ["a.com", "b.com"])
+        XCTAssertGreaterThan(rows[0].details[0].1, rows[0].details[1].1)
+        XCTAssertTrue(rows[1].details.isEmpty)
+        // Stats agree with the bar: app minutes sum to region minutes.
+        let st = summaryState(shots, from: now.addingTimeInterval(-300), to: now.addingTimeInterval(600))
+        let regionMinutes = st.regions().filter { !$0.isSleep }.reduce(0) { $0 + $1.minutes }
+        XCTAssertEqual(rows.reduce(0) { $0 + $1.minutes }, regionMinutes)
+    }
+
+    func testSummaryScopesToWindow() {
         let now = Date()
         let old = [shot(at: now.addingTimeInterval(-86400).timeIntervalSince1970, app: "Old")]
         let startOfToday = Calendar.current.startOfDay(for: now)
-        XCTAssertTrue(AppStats.rows(for: old, from: startOfToday, to: now).isEmpty)
-        XCTAssertEqual(AppStats.rows(for: old).count, 1)
+        XCTAssertTrue(summaryState(old, from: startOfToday, to: now).summary().isEmpty)
     }
 }

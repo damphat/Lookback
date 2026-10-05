@@ -23,6 +23,9 @@ struct TimelineView: View {
         ActivityState(samples: shots, from: window.0, to: window.1)
     }
     private var regions: [ActivityState.Region] { activity.regions() }
+    private var activeMinutes: Int {
+        regions.filter { !$0.isSleep }.reduce(0) { $0 + $1.minutes }
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -36,7 +39,7 @@ struct TimelineView: View {
                 Section("Ghi hình") {
                     Toggle("Tạm dừng chụp", isOn: $cap.paused)
                     Button("Mở thư mục ảnh") { NSWorkspace.shared.open(ShotStore.dir) }
-                    Text("\(shots.count) ảnh trong khung này")
+                    Text("\(TimeText.long(activeMinutes)) hoạt động trong khung này")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
@@ -76,21 +79,20 @@ struct TimelineView: View {
                                 }
                             }
                         }
-                    HStack {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text("\(timeString(for: selectedDate)) • \(relativeLabel())")
-                                .font(.callout).bold()
-                            Text(dateString(for: selectedDate)).font(.caption)
-                        }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(.black.opacity(0.55), in: Capsule())
-                        .padding(10)
-                        Spacer()
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 }
                 .frame(minHeight: 300)
+
+                // The single selected-time readout: big time + context,
+                // centred between photo and bar. Replaces the old corner
+                // pill and bottom status line (both removed as duplicates).
+                VStack(spacing: 0) {
+                    Text(timeString(for: selectedDate))
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                    Text(selectedContext())
+                        .font(.callout).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                }
+                .frame(maxWidth: .infinity)
 
                 // The bar IS the slider: uniform scrub anywhere.
                 AppActivityBar(
@@ -100,18 +102,6 @@ struct TimelineView: View {
                     selectedDate: $selectedDate,
                     onScrub: { _ in refresh() }
                 )
-
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(cap.paused ? .orange : (cap.permissionGranted ? .green : .red))
-                        .frame(width: 8, height: 8)
-                    Text(viewedLine()).font(.caption).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.tail)
-                    Spacer(minLength: 4)
-                    Text("\(shots.count) ảnh / khung").font(.caption).foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(14)
         }
@@ -148,7 +138,7 @@ struct TimelineView: View {
               let match = shots.first(where: { $0.date == s.date }) else {
             image = nil
             let f = DateFormatter(); f.dateFormat = "HH:mm"
-            caption = "Máy nghỉ / không có ảnh lúc \(f.string(from: selectedDate))"
+            caption = "Máy nghỉ lúc \(f.string(from: selectedDate))"
             isEmpty = true
             return
         }
@@ -168,7 +158,7 @@ struct TimelineView: View {
         shots = all.filter { $0.date >= from && $0.date <= to }
         if shots.isEmpty {
             image = nil
-            caption = "Chưa có ảnh nào — app sẽ chụp mỗi phút khi bạn dùng máy."
+            caption = "Chưa có hoạt động nào trong khung này."
             isEmpty = true
         } else {
             if !keepPosition { selectedDate = to }
@@ -186,14 +176,17 @@ struct TimelineView: View {
         return f.string(from: d).capitalized
     }
 
-    private func viewedLine() -> String {
-        if isEmpty { return "Máy nghỉ lúc \(timeString(for: selectedDate)) — không có ảnh" }
-        var parts = ["Đang xem ảnh lúc \(caption)"]
-        if let s = viewedShot() {
+    /// Second line of the selection readout: date + app context + age,
+    /// or the sleep state. Time-domain first, no photo counts.
+    private func selectedContext() -> String {
+        var parts = [dateString(for: selectedDate)]
+        if !isEmpty, let s = viewedShot() {
             var ctx: [String] = []
             if let a = s.app { ctx.append(a) }
             if let d = s.detail { ctx.append(d) }
             if !ctx.isEmpty { parts.append(ctx.joined(separator: " • ")) }
+        } else {
+            parts.append("Máy nghỉ")
         }
         parts.append(relativeLabel())
         return parts.joined(separator: " • ")

@@ -1,34 +1,5 @@
 import SwiftUI
 
-/// Per-day usage stats, level 1 = app (sorted by shot count ~ minutes used),
-/// level 2 = detail breakdown (website / project folder) where available.
-struct AppStats {
-    struct Row {
-        let app: String
-        let count: Int
-        /// (detail, count) sorted desc. Empty when shots carry no detail.
-        let details: [(String, Int)]
-    }
-
-    static let unknownApp = "Không rõ app"
-
-    /// Group shots by app, each row's details by part 3.
-    /// Pass `from`/`to` to scope to the shared window (nil = everything).
-    static func rows(for shots: [ShotStore.Shot], from: Date? = nil, to: Date? = nil) -> [Row] {
-        let scoped = shots.filter {
-            (from == nil || $0.date >= from!) && (to == nil || $0.date <= to!)
-        }
-        let byApp = Dictionary(grouping: scoped) { $0.app ?? unknownApp }
-        return byApp.map { app, ss in
-            let det = Dictionary(grouping: ss.compactMap(\.detail)) { $0 }
-                .map { ($0.key, $0.value.count) }
-                .sorted { $0.1 > $1.1 }
-            return Row(app: app, count: ss.count, details: det)
-        }
-        .sorted { $0.count > $1.count }
-    }
-}
-
 /// Window root: Timeline tab + app usage tab, both scoped to one shared
 /// `TimeScope` chosen in the sidebar (so "6 giờ qua" scopes stats too).
 struct MainView: View {
@@ -53,22 +24,26 @@ struct StatsView: View {
     @EnvironmentObject var scope: TimeScope
     @State private var shots: [ShotStore.Shot] = []
 
+    /// Time-domain stats: same regions the bar draws, so the numbers match.
+    private var rows: [ActivityState.SummaryRow] {
+        ActivityState(samples: shots, from: scope.from, to: scope.to).summary()
+    }
+
     var body: some View {
-        let rows = AppStats.rows(for: shots, from: scope.from, to: scope.to)
-        let total = rows.reduce(0) { $0 + $1.count }
+        let total = rows.reduce(0) { $0 + $1.minutes }
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(scope.preset.rawValue)
                     .font(.headline)
                 Spacer()
                 Text(total > 0
-                     ? "\(total) ảnh ≈ \(TimeText.long(total)) dùng máy"
-                     : "Chưa có ảnh nào trong khung này")
+                     ? "\(TimeText.long(total)) hoạt động"
+                     : "Máy nghỉ cả khung này")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if rows.isEmpty {
                 Spacer()
-                HStack { Spacer(); Text("Máy nghỉ cả ngày?").foregroundStyle(.secondary); Spacer() }
+                HStack { Spacer(); Text("Máy nghỉ cả khung này?").foregroundStyle(.secondary); Spacer() }
                 Spacer()
             } else {
                 List {
@@ -77,16 +52,16 @@ struct StatsView: View {
                             HStack {
                                 Text(row.app)
                                 Spacer()
-                                Text("\(row.count) ảnh")
+                                Text(TimeText.short(row.minutes))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                         } else {
                             DisclosureGroup {
-                                ForEach(row.details, id: \.0) { d, c in
+                                ForEach(row.details, id: \.0) { d, m in
                                     HStack {
                                         Text(d).font(.callout)
                                         Spacer()
-                                        Text("\(c) ảnh")
+                                        Text(TimeText.short(m))
                                             .font(.caption).foregroundStyle(.secondary)
                                     }
                                 }
@@ -94,7 +69,7 @@ struct StatsView: View {
                                 HStack {
                                     Text(row.app)
                                     Spacer()
-                                    Text("\(row.count) ảnh")
+                                    Text(TimeText.short(row.minutes))
                                         .font(.caption).foregroundStyle(.secondary)
                                 }
                             }

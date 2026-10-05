@@ -35,6 +35,7 @@ struct ActivityState {
         let start: Date
         let end: Date
         let count: Int
+        var minutes: Int { Int(round(end.timeIntervalSince(start) / 60)) }
     }
 
     struct Region: Equatable, Identifiable {
@@ -205,6 +206,32 @@ struct ActivityState {
             i += 1
         }
         return best
+    }
+
+    // MARK: - Summary (time-domain stats; the view never counts photos)
+
+    struct SummaryRow {
+        let app: String
+        let minutes: Int
+        /// (detail, minutes) sorted desc.
+        let details: [(String, Int)]
+    }
+
+    /// Active minutes per app (+ per detail) in this window, sorted desc.
+    /// Durations come from regions, so stats always agree with the bar.
+    func summary() -> [SummaryRow] {
+        var acc: [String: (Int, [String: Int])] = [:]
+        for r in regions() {
+            guard let app = r.kind.appName else { continue }
+            var (m, d) = acc[app] ?? (0, [:])
+            m += r.minutes
+            for c in r.children { d[c.detail, default: 0] += c.minutes }
+            acc[app] = (m, d)
+        }
+        return acc.map { app, v in
+            SummaryRow(app: app, minutes: v.0,
+                       details: v.1.sorted { $0.value > $1.value })
+        }.sorted { $0.minutes > $1.minutes }
     }
 
     // MARK: - Benchmark helper

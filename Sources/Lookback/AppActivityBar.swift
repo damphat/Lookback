@@ -49,7 +49,6 @@ struct AppActivityBar: View {
                                 let app = r.kind.appName ?? "?"
                                 ctx.fill(Path(roundedRect: rect, cornerRadius: 5),
                                          with: .color(AppPalette.color(for: app).opacity(isHovered(r) ? 1.0 : 0.72)))
-                                drawCellLabel(minutes: r.minutes, in: rect, ctx: &ctx)
                                 // Level-2: slim sibling shades of the app colour
                                 // (distinct by index, never hash-collided),
                                 // inset 1px so neighbours don't touch.
@@ -61,6 +60,10 @@ struct AppActivityBar: View {
                                              with: .color(AppPalette.shade(app: app, index: i)))
                                 }
                             }
+                            // One overlay path for every region kind: sleep cells
+                            // get their duration too, so a future render change
+                            // (border, style) touches this spot only.
+                            drawCellLabel(minutes: r.minutes, in: rect, ctx: &ctx)
                             if isHovered(r) {
                                 ctx.stroke(Path(roundedRect: rect, cornerRadius: 5),
                                            with: .color(.white.opacity(0.85)), lineWidth: 1.5)
@@ -157,53 +160,36 @@ struct AppActivityBar: View {
         return min(max(hx - cardW / 2, 0), max(0, w - cardW))
     }
 
-    /// Hover card reads the SAME `view(at:)` as the viewer: an app verdict
-    /// always carries its shot + thumbnail line, so the card can never claim
-    /// "no photo" where a click shows one (or vice versa).
+    /// One layout for every region kind: title row (marker + name + ONE
+    /// duration, headline-strong), range row, children, thumbnail, footer.
+    /// Sleep uses the same slots — nothing to hunt for, no branch UI.
     private func hoverCard(at t: Date) -> some View {
         let verdict = state.view(at: t, in: regions)
         return VStack(alignment: .leading, spacing: 6) {
             switch verdict {
             case .sleep(let r):
-                HStack(spacing: 8) {
-                    Image(systemName: "moon.zzz").font(.title3).foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Máy nghỉ").font(.headline)
-                        if let r {
-                            Text("\(Self.timeFmt.string(from: r.start)) → \(Self.timeFmt.string(from: r.end)) • \(TimeText.long(r.minutes)) • 0 ảnh")
-                                .font(.caption).foregroundStyle(.secondary)
-                        } else {
-                            Text("Ngoài khung giờ • 0 ảnh").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer()
+                cardTitle(marker: .sleep, title: "Máy nghỉ", minutes: r?.minutes)
+                if let r {
+                    cardRange(from: r.start, to: r.end)
                 }
-            case .app(let s, let r):
+            case .app(_, let r):
                 let app = r.kind.appName ?? "?"
-                HStack(spacing: 6) {
-                    Circle().fill(AppPalette.color(for: app)).frame(width: 10, height: 10)
-                    Text(app).font(.headline).lineLimit(1)
-                    Spacer()
-                    Text("\(r.count) ảnh").font(.caption).foregroundStyle(.secondary)
-                }
-                Text("\(Self.timeFmt.string(from: r.start)) → \(Self.timeFmt.string(from: r.end)) • \(TimeText.long(r.minutes))")
-                    .font(.caption).foregroundStyle(.secondary)
+                cardTitle(marker: .app(app), title: app, minutes: r.minutes)
+                cardRange(from: r.start, to: r.end)
                 ForEach(Array(r.children.prefix(5).enumerated()), id: \.element.detail) { i, c in
                     HStack(spacing: 6) {
                         Circle().fill(AppPalette.shade(app: app, index: i)).frame(width: 8, height: 8)
                         Text(c.detail).font(.caption).lineLimit(1)
                         Spacer()
-                        Text("\(c.count) ảnh").font(.caption).foregroundStyle(.secondary)
+                        Text(TimeText.short(c.minutes)).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 if let img = hoverThumb {
                     Image(nsImage: img).resizable().aspectRatio(contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
-                Text("Ảnh lúc \(Self.timeFmt.string(from: s.date)) — bấm để xem")
-                    .font(.caption).foregroundStyle(.secondary)
             case .empty:
-                Text("Ngoài khung giờ • 0 ảnh").font(.caption).foregroundStyle(.secondary)
+                cardTitle(marker: .none, title: "Ngoài khung giờ", minutes: nil)
             }
             Text(Self.timeFmt.string(from: t))
                 .font(.caption2).foregroundStyle(.secondary)
@@ -213,6 +199,36 @@ struct AppActivityBar: View {
         .frame(width: 236, alignment: .leading)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
         .shadow(radius: 8)
+    }
+
+    private enum CardMarker {
+        case app(String)
+        case sleep
+        case none
+    }
+
+    /// Shared title row: marker + name left, the ONE duration right, strong.
+    private func cardTitle(marker: CardMarker, title: String, minutes: Int?) -> some View {
+        HStack(spacing: 6) {
+            switch marker {
+            case .app(let app):
+                Circle().fill(AppPalette.color(for: app)).frame(width: 10, height: 10)
+            case .sleep:
+                Image(systemName: "moon.zzz").foregroundStyle(.secondary)
+            case .none:
+                EmptyView()
+            }
+            Text(title).font(.headline).lineLimit(1)
+            Spacer()
+            if let minutes {
+                Text(TimeText.long(minutes)).font(.headline)
+            }
+        }
+    }
+
+    private func cardRange(from: Date, to: Date) -> some View {
+        Text("\(Self.timeFmt.string(from: from)) → \(Self.timeFmt.string(from: to))")
+            .font(.caption).foregroundStyle(.secondary)
     }
 }
 
