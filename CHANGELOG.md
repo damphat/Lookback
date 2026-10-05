@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.2 — 2026-10-05
+
+Refactor lớn sang miền thời gian (chuẩn bị cho tương lai bỏ ảnh): UI không
+đếm ảnh nữa, mọi con số là phút, mọi độ rộng là thời gian.
+
+- `ActivityState` cell-model: mỗi sample sở hữu một cell thời gian (chia đôi
+  với ảnh kề, tối đa ±150s); region = hợp các cell nên số phút và số ảnh khớp
+  nhau theo cấu trúc, không còn padding/clamp vá. Một lookup duy nhất
+  `view(at:)` cho cả hover, viewer và thống kê.
+- Thanh activity là slider duy nhất (click/drag mọi điểm đều chạy, kể cả vùng
+  ngủ); ô con là shade cùng họ màu app theo thứ tự (hết trùng màu hash),
+  inset 1px, thấp gọn; ô nào cũng overlay thời lượng.
+- `TimeRuler` tách riêng (model + view, có test): tick thích ứng không chồng
+  chữ, mép phải là "now" khi window live.
+- Popup một layout cho mọi vùng (tên + MỘT duration headline + khoảng giờ +
+  tối đa 5 vùng con); bỏ dòng "Ảnh lúc … bấm để xem".
+- Dải readout giờ-đang-chọn to giữa ảnh và bar; bỏ pill góc ảnh và dòng
+  status bottom (trùng lặp, khó hiểu).
+- Tab Thống kê cộng phút từ regions (`summary()`), khớp tuyệt đối với bar;
+  preset khung giờ (1h/6h/24h/Hôm nay/Sáng hôm qua) dùng chung cho cả hai tab
+  qua `TimeScope`. Mọi chuỗi thời gian qua `TimeText` (short/long/ago).
+- Màu app: `AppPalette` (8 app quen gán cứng + vòng 12 màu), test khóa 7 app
+  phổ biến đôi một khác màu.
+
 ## 1.1 — 2026-10-06
 
 - Tên file 3 phần `timestamp__app__detail.jpg` (app/detail optional, file cũ

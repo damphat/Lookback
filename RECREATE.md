@@ -41,34 +41,34 @@ timeline trực quan. Đơn giản, hiện đại, tiết kiệm pin.
 - Nếu khởi động mà chưa có quyền: **tự bung cửa sổ** để user thấy banner cảnh
   báo, tránh chạy cả ngày mà không có ảnh nào.
 
-## 4. Viewer 24 giờ
+## 4. Viewer (miền thời gian, không đếm ảnh)
 
-- Ảnh lớn co giãn theo cửa sổ; dưới là `AppActivityBar` (file riêng):
-  dải màu liên tục theo app (mỗi app một màu ổn định, khoảng trống = máy
-  nghỉ), vạch giờ + nhãn from/mid/to tự theo khung quan sát, playhead trùng
-  với slider; hover sáng cả vùng session và hiện popup (tên app, khoảng giờ,
-  thời lượng, preview ảnh tại vị trí chuột); click chọn ảnh đó. Dưới nữa là
-  slider full-width đồng bộ cùng `fraction`, nhãn thời gian nằm **dưới**
-  slider. Bar nhận `from`/`to` tường minh nên tái dùng được cho mọi khung
-  quan sát, không gắn cứng 24h.
-- Overlay trên ảnh: **đang kéo slider** thì hiện khối to giữa ảnh (giờ 64pt,
-  ngày nhỏ, "X phút trước"); **thả ra** thì thu thành pill nhỏ góc ảnh.
-- Dòng cuối mô tả đúng khoảnh khắc đang xem và chạy theo slider
-  (vd "Đang xem ảnh lúc 14:32 • 58 phút trước"), kèm số ảnh/24h. Tuyệt đối
-  không hiện con số tĩnh của engine (vd "đã chụp lúc…") vì user tưởng bug.
+- Trục dọc: ảnh lớn co giãn → dải readout giờ-đang-chọn (giờ to + ngữ cảnh,
+  canh giữa) → `AppActivityBar` → `TimeRuler`. Không pill góc ảnh, không dòng
+  status bottom, không slider riêng: **bar chính là slider** (bấm/kéo mọi
+  điểm đều chạy, kể cả vùng ngủ).
+- Mọi số liệu là phút (`TimeText`: short/long/ago), không chỗ nào đếm ảnh.
+- `ActivityState` là single source of truth: mỗi sample một cell thời gian
+  (chia đôi với ảnh kề, tối đa ±sleepGap/2), region = hợp cell, sleep = phần
+  bù; regions lát khít khung nhìn. Mọi hiển thị (màu, popup, viewer, thống
+  kê) đều từ `regions()` + `view(at:)` — cấm dung sai/tolerance riêng ở
+  caller. Màu qua `AppPalette` (app cố định, vùng con = shade theo thứ tự).
+- Sidebar preset khung giờ dùng chung 2 tab (`TimeScope`). Tab Thống kê cộng
+  phút từ `summary()` nên khớp tuyệt đối với bar.
 - Danh sách file chỉ quét đĩa khi mở cửa sổ và khi cửa sổ được focus lại;
-  lúc kéo slider chỉ đọc từ cache RAM. Không timer poll, không nút "Làm mới".
-- Trạng thái trống: pill xám "Máy nghỉ / không có ảnh lúc HH:mm" khi điểm
-  được chọn cách ảnh gần nhất quá ~90 giây.
+  lúc kéo chỉ đọc cache RAM. Không timer poll, không nút "Làm mới".
+- Trạng thái trống: "Máy nghỉ lúc HH:mm" / "Chưa có hoạt động nào".
 
 ## 5. Đóng gói & kiểm thử
 
 - SwiftPM (`swift build -c release`), script build ra `.app` gồm binary +
   Info.plist + `.icns` (vẽ icon bằng code rồi `iconutil -c icns` cũng được).
-- Unit test tối thiểu cho logic "tìm ảnh gần nhất trong tolerance, ngoài thì
-  nil" — logic này mà sai thì slider hiển thị sai.
+- Unit test khóa bất biến kiến trúc: regions lát khít không chồng/khe,
+  `view(at:)` trong vùng app luôn có shot, stats = tổng region, tick không
+  chồng chữ, màu các app phổ biến đôi một khác nhau (`swift test`).
 - Kiểm thử tay: mở app khi có/không có quyền, click trái/phải tray, kéo
-  slider nhiều vị trí, đóng/mở lại cửa sổ, rebuild rồi cấp quyền lại.
+  slider nhiều vị trí (kể cả vùng ngủ), đổi preset, đóng/mở lại cửa sổ,
+  rebuild rồi cấp quyền lại.
 
 ## 6. Non-goals
 
