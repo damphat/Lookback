@@ -12,7 +12,6 @@ struct TimelineView: View {
     @State private var scrubbing = false
 
     private let span: TimeInterval = 24 * 3600
-    private let cells = 48
 
     var body: some View {
         VStack(spacing: 10) {
@@ -87,26 +86,21 @@ struct TimelineView: View {
             }
             .frame(minHeight: 300)
 
-            // B. Activity strip: fixed-width thumbnail cells, aligned with slider.
-            GeometryReader { geo in
-                let w = (geo.size.width - CGFloat(cells - 1) * TimelineLayout.cellSpacing) / CGFloat(cells)
-                HStack(spacing: TimelineLayout.cellSpacing) {
-                    ForEach(0..<cells, id: \.self) { i in
-                        cellView(i, width: w)
-                            .frame(width: w, height: TimelineLayout.cellHeight)
-                            // Confine hit-testing to the cell bounds so a
-                            // filled thumbnail can never steal taps from neighbours.
-                            .contentShape(Rectangle())
-                            .clipped()
-                            .onTapGesture {
-                                fraction = TimelineLayout.fraction(forCell: i, cells: cells)
-                                refresh()
-                            }
-                            .help(timeLabel(for: cellStart(i)))
-                    }
-                }
-            }
-            .frame(height: TimelineLayout.cellHeight)
+            // B. Activity bar: per-app colour segments for the observed
+            // window, hover popup + click-to-view. Same selection state as
+            // the slider below (both drive `fraction`).
+            AppActivityBar(
+                shots: shots,
+                from: Date().addingTimeInterval(-span),
+                to: Date(),
+                selectedDate: Binding(
+                    get: { selectedDate() },
+                    set: {
+                        fraction = min(1, max(0, ($0.timeIntervalSinceNow + span) / span))
+                        refresh()
+                    }),
+                onSelect: { _ in refresh() }
+            )
 
             // C. Slider full width, labels below so both ends align with the strip.
             VStack(spacing: 2) {
@@ -159,43 +153,6 @@ struct TimelineView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             reload(keepPosition: true)
         }
-    }
-
-    // MARK: - Cells
-
-    private func cellStart(_ i: Int) -> Date {
-        Date().addingTimeInterval(-span + Double(i) * span / Double(cells))
-    }
-
-    private func repShot(_ i: Int) -> ShotStore.Shot? {
-        let mid = cellStart(i).addingTimeInterval(span / Double(cells) / 2)
-        return ShotStore.nearest(to: mid, in: shots, tolerance: span / Double(cells) / 2)
-    }
-
-    @ViewBuilder
-    private func cellView(_ i: Int, width w: CGFloat) -> some View {
-        let isActive = TimelineLayout.cellIndex(forFraction: fraction, cells: cells) == i
-        // Explicit content size + clipped: the image can never bleed
-        // into neighbouring cells regardless of its aspect ratio.
-        // The stroke is inset so the 2pt ring paints inside the cell
-        // instead of overlapping the neighbour's hit area.
-        Group {
-            if let s = repShot(i), let t = ThumbCache.thumb(for: s) {
-                Image(nsImage: t)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: w, height: TimelineLayout.cellHeight)
-                    .clipped()
-            } else {
-                Color(nsColor: .separatorColor).opacity(0.5)
-                    .frame(width: w, height: TimelineLayout.cellHeight)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: TimelineLayout.cellCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: TimelineLayout.cellCornerRadius)
-                .strokeBorder(isActive ? Color.accentColor : .clear, lineWidth: 2)
-        )
     }
 
     // MARK: - Helpers
@@ -266,7 +223,4 @@ struct TimelineView: View {
         return "\(mins / 60)h\(mins % 60 == 0 ? "" : "\(mins % 60)p") trước"
     }
 
-    private func timeLabel(for d: Date) -> String {
-        let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: d)
-    }
 }

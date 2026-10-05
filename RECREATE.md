@@ -43,11 +43,14 @@ timeline trực quan. Đơn giản, hiện đại, tiết kiệm pin.
 
 ## 4. Viewer 24 giờ
 
-- Ảnh lớn co giãn theo cửa sổ; dưới là dải 48 ô (mỗi ô 30 phút), mỗi ô hiện
-  **thumbnail thật** đúng thời điểm (`scaledToFill` + `frame` cố định + `clipped`
-  để không tràn sang ô bên), ô không có ảnh thì xám, ô đang chọn viền màu;
-  bấm ô nhảy slider tới giờ đó. Dưới nữa là slider full-width, nhãn thời gian
-  nằm **dưới** slider để hai đầu thẳng hàng với dải ô.
+- Ảnh lớn co giãn theo cửa sổ; dưới là `AppActivityBar` (file riêng):
+  dải màu liên tục theo app (mỗi app một màu ổn định, khoảng trống = máy
+  nghỉ), vạch giờ + nhãn from/mid/to tự theo khung quan sát, playhead trùng
+  với slider; hover sáng cả vùng session và hiện popup (tên app, khoảng giờ,
+  thời lượng, preview ảnh tại vị trí chuột); click chọn ảnh đó. Dưới nữa là
+  slider full-width đồng bộ cùng `fraction`, nhãn thời gian nằm **dưới**
+  slider. Bar nhận `from`/`to` tường minh nên tái dùng được cho mọi khung
+  quan sát, không gắn cứng 24h.
 - Overlay trên ảnh: **đang kéo slider** thì hiện khối to giữa ảnh (giờ 64pt,
   ngày nhỏ, "X phút trước"); **thả ra** thì thu thành pill nhỏ góc ảnh.
 - Dòng cuối mô tả đúng khoảnh khắc đang xem và chạy theo slider

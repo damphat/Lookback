@@ -8,6 +8,12 @@
 - Tab "Thống kê": app trong ngày sort theo số ảnh (≈ số phút dùng), bung ra
   xem chi tiết từng website/folder. Dòng bottom timeline cũng hiện app •
   detail của ảnh đang xem.
+- `AppActivityBar` (file riêng, tái dùng với mọi khung from/to): dải màu
+  liên tục theo app, hover sáng cả vùng + popup (khoảng giờ, thời lượng,
+  preview ảnh tại chuột), click chọn ảnh. Thay thế dải 48 ô cũ.
+- Bar: vùng sleep cũng hover được (popup "Máy nghỉ" + khoảng giờ + số
+  phút); nhấn-giữ và drag để scrub toàn bar; viền hover vẽ cùng frame với
+  ô; popup chuyển ra overlay nên không còn đẩy layout.
 
 ## 1.0 — 2026-10-05
 
