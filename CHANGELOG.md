@@ -1,5 +1,15 @@
 # Changelog
 
+## Chưa phát hành
+
+- `NSAppleEventsUsageDescription` trong Info.plist (thiếu key này macOS deny
+  Automation im lặng, không hiện dialog).
+- Phát hiện deny Automation (`AEDeterminePermissionToAutomateTarget`, không
+  tự pop dialog) + banner cam hướng dẫn mở Settings Automation và nút kiểm
+  tra lại, tương tự banner Screen Recording.
+- Chặn Cmd+Q vô tình (`QuitGate`: chỉ thoát từ tray menu Thoát; logout/
+  restart/shutdown vẫn qua).
+
 ## 1.2 — 2026-10-05
 
 Refactor lớn sang miền thời gian (chuẩn bị cho tương lai bỏ ảnh): UI không

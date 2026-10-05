@@ -63,6 +63,26 @@ struct TimelineView: View {
                     .background(Color.yellow.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
                     .lineLimit(2)
                 }
+                if cap.automationDenied {
+                    HStack(spacing: 8) {
+                        Image(systemName: "lock.trianglebadge.exclamationmark")
+                            .foregroundStyle(.orange)
+                        Text("Chrome đang mở nhưng Lookback bị từ chối Automation nên không lấy được tên website.")
+                            .font(.callout).lineLimit(2).truncationMode(.tail)
+                        Spacer(minLength: 4)
+                        Button("Cấp quyền…") { cap.requestAutomation() }
+                            .controlSize(.small)
+                        Button("Mở Settings…") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(8)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                    .lineLimit(2)
+                }
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color(nsColor: .windowBackgroundColor))

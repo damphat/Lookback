@@ -1,15 +1,21 @@
 import AppKit
+import CoreServices
 import Foundation
 
 /// Best-effort "what is the user doing right now" context for filenames.
 /// Never throws, never blocks the capture loop: every step degrades to nil.
 ///
 /// - App name: `NSWorkspace.frontmostApplication` — no permission needed.
-/// - Chrome domain: AppleScript `URL of active tab`. macOS may ask for
-///   Automation permission once; if the user denies, this just stays nil.
+/// - Chrome domain: AppleScript `URL of active tab`. Needs Automation
+///   consent (Lookback → Chrome); a deny is sticky-detectable via
+///   `chromeDenied` so the UI can point at Settings (mirrors the Screen
+///   Recording banner). The check never prompts by itself.
 /// - VSCode folder: frontmost VSCode window title via CGWindowList
 ///   (no permission needed), last path component only.
 enum ActiveContext {
+    /// Outcome of the last `current()` call: true only when Chrome was
+    /// frontmost AND Automation consent is missing. Drives the banner.
+    static var chromeDenied = false
     struct Info {
         /// Display name of the frontmost app, e.g. "Google Chrome".
         let app: String?
@@ -25,6 +31,7 @@ enum ActiveContext {
         let appName = front.localizedName?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let name = (appName?.isEmpty == false) ? appName : nil
+        chromeDenied = false // re-armed below only on a live denial
 
         let detail: String?
         if bundleID == "com.google.Chrome"
@@ -42,9 +49,52 @@ enum ActiveContext {
 
     // MARK: - Chrome
 
+    /// Pure mapping of the permission-check status: anything but noErr
+    /// (-1743 denied, -1744 consent required, ...) counts as denied.
+    static func automationDenied(status: OSStatus) -> Bool { status != noErr }
+
+    /// User-initiated consent request (banner "Cấp quyền…" button). THIS is
+    /// the only path that pops the system dialog and creates the Automation
+    /// entry for the current binary — the background loop deliberately never
+    /// does (`askUserIfNeeded: false`), so a fresh install can never get
+    /// listed without this tap. Returns true when consent is now granted.
+    @discardableResult
+    static func requestChromeAutomation() -> Bool {
+        guard var target = chromeTarget() else { return false }
+        defer { AEDisposeDesc(&target) }
+        let status = AEDeterminePermissionToAutomateTarget(
+            &target, AEEventClass(kAECoreSuite), AEEventID(kAEGetData), true)
+        return !automationDenied(status: status)
+    }
+
+    private static func chromeTarget() -> AEAddressDesc? {
+        var target = AEAddressDesc()
+        let bid = "com.google.Chrome"
+        let made = bid.utf8CString.withUnsafeBufferPointer { buf in
+            AECreateDesc(typeApplicationBundleID, buf.baseAddress,
+                         buf.count, &target)
+        }
+        guard made == noErr else { return nil }
+        return target
+    }
+
+    /// Automation consent for scripting Chrome, WITHOUT prompting
+    /// (`askUserIfNeeded: false` — the background loop must never pop a
+    /// dialog; the banner asks the user to open Settings instead).
+    static func chromeAutomationDenied() -> Bool {
+        guard var target = chromeTarget() else { return false }
+        defer { AEDisposeDesc(&target) }
+        let status = AEDeterminePermissionToAutomateTarget(
+            &target, AEEventClass(kAECoreSuite), AEEventID(kAEGetData), false)
+        return automationDenied(status: status)
+    }
+
     /// Domain of the active tab, e.g. "github.com". Nil when Chrome is not
-    /// scriptable right now (no window, permission denied, ...).
+    /// scriptable right now (no window, ...). A consent denial is recorded
+    /// in `chromeDenied` instead of being retried blindly every minute.
     private static func chromeDomain() -> String? {
+        if chromeAutomationDenied() { chromeDenied = true; return nil }
+        chromeDenied = false
         let src = "tell application \"Google Chrome\" to get URL of active tab of front window"
         guard let script = NSAppleScript(source: src) else { return nil }
         var err: NSDictionary?

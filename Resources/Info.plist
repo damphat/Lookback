@@ -5,12 +5,13 @@
     <key>CFBundleExecutable</key><string>Lookback</string>
     <key>CFBundleIdentifier</key><string>com.lookback.app</string>
     <key>CFBundleName</key><string>Lookback</string>
-    <key>CFBundleVersion</key><string>1.2</string>
-    <key>CFBundleShortVersionString</key><string>1.2</string>
+    <key>CFBundleVersion</key><string>1.4</string>
+    <key>CFBundleShortVersionString</key><string>1.4</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleIconFile</key><string>Lookback</string>
     <key>LSUIElement</key><true/>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>NSScreenCaptureDescription</key><string>Lookback chụp màn hình mỗi phút để bạn xem lại mình đã làm gì.</string>
+    <key>NSAppleEventsUsageDescription</key><string>Lookback đọc tab đang mở của Chrome để ghi tên website vào ảnh chụp.</string>
 </dict>
 </plist>

@@ -14,6 +14,9 @@ final class CaptureService: ObservableObject {
 
     @Published var paused = false
     @Published var permissionGranted = CGPreflightScreenCaptureAccess()
+    /// True when Chrome was frontmost but Automation consent is missing
+    /// (domain capture silently degraded). Mirrors `permissionGranted`.
+    @Published var automationDenied = false
 
     private var timer: Timer?
     private var lastHash = ""
@@ -52,6 +55,12 @@ final class CaptureService: ObservableObject {
         permissionGranted = CGPreflightScreenCaptureAccess()
     }
 
+    /// User-tapped consent request: pops the real system dialog and creates
+    /// the Automation entry for THIS binary. Call only from explicit UI.
+    func requestAutomation() {
+        automationDenied = !ActiveContext.requestChromeAutomation()
+    }
+
     private func idleSeconds() -> TimeInterval {
         // hidSystemState + kCGAnyInputEventType (0xFFFFFFFF) = standard idle time.
         let t = CGEventSource.secondsSinceLastEventType(
@@ -82,6 +91,8 @@ final class CaptureService: ObservableObject {
         // Best-effort context (frontmost app + Chrome domain / VSCode
         // folder). Nil parts are dropped, degrading to timestamp-only.
         let ctx = ActiveContext.current()
+        let denied = ActiveContext.chromeDenied
+        DispatchQueue.main.async { self.automationDenied = denied }
         let url = ShotStore.dir.appendingPathComponent(
             ShotStore.filename(for: now, app: ctx.app, detail: ctx.detail))
         try? jpg.write(to: url)
