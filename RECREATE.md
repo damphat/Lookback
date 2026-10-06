@@ -33,14 +33,20 @@ timeline trực quan. Đơn giản, hiện đại, tiết kiệm pin.
   thumbnail; mở lại thì state mới (nhưng preset khung giờ được nhớ qua
   UserDefaults).
 
-## 3. Pipeline chụp (tiết kiệm pin là ưu tiên số 1)
+## 3. Hợp đồng ảnh → thời gian (hai bên gộp bằng một ánh xạ)
 
-- Chu kỳ 60s trên queue `.utility`, dùng `CGDisplayCreateImage` màn hình chính.
-- Bỏ qua khi máy nghỉ: `CGEventSource.secondsSinceLastEventType(.hidSystemState,
-  eventType: any-input)` > 10 phút thì không chụp.
-  (Cẩn thận: sai event source/type sẽ khiến app không bao giờ chụp.)
-- Bỏ qua ảnh trùng pixel (hash MD5 so với lần trước).
-- Downscale còn tối đa 1280px, nén JPEG quality ~0.45.
+- **Bên sản xuất (capture):** mỗi 60s đẻ một sample có timestamp khi user
+  còn đó. Chỉ được nghỉ khi pause/thiếu quyền/máy nghỉ > 10 phút
+  (`CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType:
+  any-input)` — sai event source/type là không bao giờ chụp). Cấm gap câm
+  vì "trùng pixel": sleep không phải việc của bên này.
+- **Bên ánh xạ (ActivityState):** ánh xạ duy nhất từ miền sample sang miền
+  thời gian (cell → region → sleep/view/summary). Sleep là phần bù do ánh
+  xạ suy ra từ gap, không phải sự kiện capture ghi nhận.
+- Mai sau thay nguồn sample (kể cả không chụp nữa) chỉ cần đẻ sample + viết
+  ánh xạ mới, phía hiển thị giữ nguyên.
+- Chi tiết capture: queue `.utility`, `CGDisplayCreateImage` màn hình chính,
+  downscale còn tối đa 1280px, JPEG quality ~0.45.
 - Lưu `~/.lookback/YYYY-MM-DD_HH-mm-ss[__app[__detail]].jpg` (Chrome →
   domain tab đang mở, VSCode → tên folder project; thiếu context thì về tên
   timestamp-only như cũ), tự xóa file quá 7 ngày. Mỗi shot lưu xong bump một

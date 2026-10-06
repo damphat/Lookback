@@ -20,6 +20,9 @@ Lô TODO menu/window + fix đảo ngược trạng thái tray. Mental model gọ
 
 ## Chưa phát hành
 
+- Bỏ dedup trùng pixel (MD5 vs shot trước): capture là bên sản xuất, mỗi
+  phút user còn đó phải có một sample — sleep do bên ánh xạ suy ra từ gap,
+  nên nuốt sample "trùng" là báo "máy nghỉ" giả + thiếu phút thống kê.
 - Layout 3 vùng: sidebar trái "Tùy chọn" (khung giờ + thư mục ảnh) và panel
   phải "Thống kê" đều ẩn/hiện được từ toolbar; bỏ tab Timeline/Thống kê.
   Ảnh giữa dùng một photo-well phẳng duy nhất, hết viền lồng nhau.

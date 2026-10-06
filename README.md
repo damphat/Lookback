@@ -9,9 +9,10 @@ một timeline trực quan theo miền thời gian (mọi con số là phút, kh
 
 ## Tính năng
 
-- **Chụp nền tiết kiệm pin:** mỗi 60 giây chụp màn hình chính một lần, chỉ khi
-  bạn đang dùng máy (nghỉ tay quá 10 phút thì thôi), màn hình đứng yên thì
-  không lưu trùng, ảnh thu nhỏ còn 1280px + nén JPEG.
+- **Chụp nền tiết kiệm pin:** mỗi 60 giây lưu một ảnh màn hình chính khi
+  bạn đang dùng máy (nghỉ tay quá 10 phút thì thôi — và đó là lý do duy
+  nhất để có khoảng trống; màn hình đứng yên vẫn lưu để timeline không
+  báo "máy nghỉ" giả), ảnh thu nhỏ còn 1280px + nén JPEG.
 - **Chạy ngầm:** không icon Dock, chỉ một icon đồng hồ trên Menu Bar.
   Chuột trái vào icon = mở / lôi cửa sổ lên, chuột phải = menu duy nhất
   **Tạm dừng/Tiếp tục chụp** + Thoát. Đang dừng thì icon mờ đi + tooltip báo

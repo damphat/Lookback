@@ -1,13 +1,14 @@
 import AppKit
 import CoreGraphics
-import CryptoKit
 import Foundation
 
-/// Battery-friendly capture loop (app-wide singleton: closing the window
-/// must NOT stop capturing).
+/// Sample producer (app-wide singleton: closing the window must NOT stop
+/// capturing). Contract: while the user is present, every 60s tick emits one
+/// timestamped sample — never a silent gap. Sleep is NOT recorded here; the
+/// time-mapping side infers it from gaps.
 /// - every 60s, on .utility queue
-/// - skips capture when machine idle (no input events) to save CPU/battery
-/// - skips saving when pixels identical to previous shot (static screen)
+/// - skips only when paused, permission missing, or machine idle (no input
+///   events for 10 min) to save CPU/battery
 /// - downscales main display to max 1280px wide, JPEG ~0.45
 final class CaptureService: ObservableObject {
     static let shared = CaptureService()
@@ -23,7 +24,6 @@ final class CaptureService: ObservableObject {
     @Published private(set) var generation = 0
 
     private var timer: Timer?
-    private var lastHash = ""
     private let queue = DispatchQueue(label: "lookback.capture", qos: .utility)
 
     // Idle threshold: no key/mouse event for 10 min -> skip capture.
@@ -102,12 +102,6 @@ final class CaptureService: ObservableObject {
         guard let img = CGDisplayCreateImage(CGMainDisplayID()) else { return }
         let small = downscale(img, maxWidth: 1280)
         guard let jpg = jpegData(of: small, quality: 0.45) else { return }
-
-        // Skip duplicates: same pixels as last shot -> save disk + battery.
-        let digest = Insecure.MD5.hash(data: jpg)
-        let hash = digest.map { String(format: "%02x", $0) }.joined()
-        if hash == lastHash { return }
-        lastHash = hash
 
         let now = Date()
         // Best-effort context (frontmost app + Chrome domain / VSCode
