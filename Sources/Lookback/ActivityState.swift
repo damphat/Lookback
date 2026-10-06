@@ -44,11 +44,34 @@ struct ActivityState {
         let start: Date
         let end: Date
         let count: Int
-        /// All child detail runs (already ordered by start). Hover callers
-        /// take `prefix(5)`; render callers draw all (they are disjoint).
+        /// All child detail runs (already ordered by start). Render callers
+        /// draw all (they are disjoint); hover callers use `topDetails()`,
+        /// never a raw `prefix(5)` over runs.
         let children: [ChildRegion]
         var isSleep: Bool { kind == .sleep }
         var minutes: Int { Int(round(end.timeIntervalSince(start) / 60)) }
+
+        /// Top details by total time in this region, most-used first.
+        ///
+        /// Children are contiguous same-detail runs, so one detail (a
+        /// website, file, doc…) can appear in several non-adjacent runs.
+        /// This groups those runs by detail string, sums exact durations,
+        /// sorts desc, and caps at `limit`. Tie-break is by detail name so
+        /// the order is deterministic. Detail is opaque — no per-app
+        /// branching — so this holds for every tiered app, not just Chrome.
+        func topDetails(limit: Int = 5) -> [(detail: String, minutes: Int)] {
+            var acc: [String: TimeInterval] = [:]
+            for c in children {
+                acc[c.detail, default: 0] += c.end.timeIntervalSince(c.start)
+            }
+            return acc.map { (detail: $0.key, minutes: Int(round($0.value / 60))) }
+                .sorted {
+                    if $0.minutes != $1.minutes { return $0.minutes > $1.minutes }
+                    return $0.detail < $1.detail
+                }
+                .prefix(limit)
+                .map { $0 }
+        }
     }
 
     static let unknownApp = "Unknown"

@@ -176,7 +176,7 @@ struct AppActivityBar: View {
                 let app = r.kind.appName ?? "?"
                 cardTitle(marker: .app(app), title: app, minutes: r.minutes)
                 cardRange(from: r.start, to: r.end)
-                ForEach(Array(r.children.prefix(5).enumerated()), id: \.element.detail) { i, c in
+                ForEach(Array(r.topDetails().enumerated()), id: \.element.detail) { i, c in
                     HStack(spacing: 6) {
                         Circle().fill(AppPalette.shade(app: app, index: i)).frame(width: 8, height: 8)
                         Text(c.detail).font(.caption).lineLimit(1)

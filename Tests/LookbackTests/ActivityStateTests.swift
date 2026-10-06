@@ -89,6 +89,42 @@ final class ActivityStateTests: XCTestCase {
         }
     }
 
+    func testTopDetailsGroupsNonAdjacentRunsByTotalTime() {
+        // Screenshot bug: x.com in 3 separate runs showed as 3 rows.
+        // The popup must show it once, with the summed total, ranked first.
+        let st = state([(0, "Chrome", "x.com"), (60, "Chrome", "settings"),
+                        (120, "Chrome", "x.com"), (180, "Chrome", "youtube.com"),
+                        (240, "Chrome", "x.com")], span: 7200)
+        let regs = st.regions().filter { !$0.isSleep }
+        XCTAssertEqual(regs.count, 1)
+        XCTAssertEqual(regs[0].children.filter { $0.detail == "x.com" }.count, 3)
+        let top = regs[0].topDetails()
+        XCTAssertEqual(top.map(\.detail), ["x.com", "settings", "youtube.com"])
+        let xTotal = regs[0].children.filter { $0.detail == "x.com" }
+            .reduce(0.0) { $0 + $1.end.timeIntervalSince($1.start) }
+        XCTAssertEqual(top[0].minutes, Int(round(xTotal / 60)))
+    }
+
+    func testTopDetailsCapsAtFiveSortedDesc() {
+        var samples: [(Double, String?, String?)] = []
+        for i in 0..<7 { samples.append((Double(i * 60), "Chrome", "d\(i)")) }
+        let st = state(samples, span: 7200)
+        let regs = st.regions().filter { !$0.isSleep }
+        XCTAssertEqual(regs[0].children.count, 7)
+        let top = regs[0].topDetails()
+        XCTAssertEqual(top.count, 5)
+        // d6 owns the trailing cell tail so it ranks first; the 1-minute
+        // ties after it break alphabetically for a deterministic order.
+        XCTAssertEqual(top.map(\.detail), ["d6", "d0", "d1", "d2", "d3"])
+    }
+
+    func testTopDetailsEmptyWhenNoDetails() {
+        let st = state([(0, "A", nil), (60, "A", nil)])
+        let regs = st.regions().filter { !$0.isSleep }
+        XCTAssertEqual(regs.count, 1)
+        XCTAssertTrue(regs[0].topDetails().isEmpty)
+    }
+
     func testViewAtTopChildren() {
         var st = state(span: 7200)
         for i in 0..<7 {
