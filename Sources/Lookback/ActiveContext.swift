@@ -94,16 +94,27 @@ enum ActiveContext {
         return automationDenied(status: status)
     }
 
+    /// Compiled once, reused every call. Benchmark (Oct 2026, this Mac):
+    /// init/compile is ~0.01ms, but a fresh NSAppleScript + execute costs
+    /// ~45ms vs ~15ms on a reused instance — the per-call engine/channel
+    /// setup dominates, not compilation. (Swift `static let` inits lazily
+    /// and thread-safely on first use.)
+    private static let chromeScript = NSAppleScript(source:
+        "tell application \"Google Chrome\" to get URL of active tab of front window")
+    /// NSAppleScript isn't documented thread-safe and the capture loop runs
+    /// off-main, so execution is serialized. Lock cost (~ns) is noise next
+    /// to the ~15ms AppleEvent round-trip.
+    private static let chromeScriptLock = NSLock()
+
     /// Domain of the active tab, e.g. "github.com". Nil when Chrome is not
     /// scriptable right now (no window, ...). Caller has already proven
     /// consent, so this never touches the latch.
     private static func chromeDomain() -> String? {
-        let src = "tell application \"Google Chrome\" to get URL of active tab of front window"
-        guard let script = NSAppleScript(source: src) else { return nil }
+        chromeScriptLock.lock()
+        defer { chromeScriptLock.unlock() }
         var err: NSDictionary?
-        let result = script.executeAndReturnError(&err)
-        guard err == nil, result.stringValue != nil else { return nil }
-        guard let urlString = result.stringValue,
+        let result = chromeScript?.executeAndReturnError(&err)
+        guard err == nil, let urlString = result?.stringValue,
               let host = URL(string: urlString)?.host,
               !host.isEmpty else { return nil }
         var domain = host.lowercased()
