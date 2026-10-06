@@ -20,6 +20,11 @@ Lô TODO menu/window + fix đảo ngược trạng thái tray. Mental model gọ
 
 ## Chưa phát hành
 
+- Layout 3 vùng: sidebar trái "Tùy chọn" (khung giờ + thư mục ảnh) và panel
+  phải "Thống kê" đều ẩn/hiện được từ toolbar; bỏ tab Timeline/Thống kê.
+  Ảnh giữa dùng một photo-well phẳng duy nhất, hết viền lồng nhau.
+- Cửa sổ tự nhớ kích thước/vị trí (`lookback.windowFrame`): resize một lần,
+  mở lại giữ nguyên; mặc định lần đầu rộng 1160×720 thay vì 700×600.
 - `NSAppleEventsUsageDescription` trong Info.plist (thiếu key này macOS deny
   Automation im lặng, không hiện dialog).
 - Phát hiện deny Automation (`AEDeterminePermissionToAutomateTarget`, không

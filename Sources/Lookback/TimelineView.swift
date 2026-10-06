@@ -1,8 +1,9 @@
 import CoreGraphics
 import SwiftUI
 
-/// Timeline viewer with sidebar: time presets + capture settings on the left,
-/// image + activity bar (the single scrubber) on the right.
+/// Timeline viewer (center column): photo + readout + activity bar (the
+/// single scrubber). No chrome of its own — presets live in the left sidebar,
+/// stats in the right inspector.
 ///
 /// Perf contract: `ActivityState` + regions are built ONCE per (reload, view
 /// preset) and passed into the bar. Hover/drag inside the bar never rebuilds
@@ -26,36 +27,9 @@ struct TimelineView: View {
         ActivityState(samples: shots, from: window.0, to: window.1)
     }
     private var regions: [ActivityState.Region] { activity.regions() }
-    private var activeMinutes: Int {
-        regions.filter { !$0.isSleep }.reduce(0) { $0 + $1.minutes }
-    }
 
     var body: some View {
-        NavigationSplitView {
-            // Sidebar: time presets + capture settings.
-            List(selection: $scope.preset) {
-                Section("Khung giờ") {
-                    ForEach(TimeScope.Preset.allCases) { p in
-                        Text(p.rawValue).tag(p)
-                    }
-                }
-                Section("Ghi hình") {
-                    // Pause lives ONLY in the tray menu (single start/stop);
-                    // the window shows the state read-only, no second switch.
-                    if cap.paused {
-                        Label("Đang tạm dừng chụp", systemImage: "pause.circle")
-                            .foregroundStyle(.secondary)
-                    }
-                    Button("Mở thư mục ảnh") { NSWorkspace.shared.open(ShotStore.dir) }
-                    Text("\(TimeText.long(activeMinutes)) hoạt động trong khung này")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            .listStyle(.sidebar)
-            .navigationTitle("Lookback")
-            .navigationSplitViewColumnWidth(min: 150, ideal: 175, max: 230)
-        } detail: {
-            VStack(spacing: 10) {
+        VStack(spacing: 8) {
                 if !cap.permissionGranted {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
@@ -87,24 +61,23 @@ struct TimelineView: View {
                     .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
                     .lineLimit(2)
                 }
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(nsColor: .windowBackgroundColor))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .overlay {
-                            if let image {
-                                Image(nsImage: image)
-                                    .resizable().aspectRatio(contentMode: .fit)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                            } else {
-                                VStack(spacing: 6) {
-                                    Image(systemName: "moon.zzz").font(.largeTitle).foregroundStyle(.secondary)
-                                    Text(isEmpty ? caption : "Đang tải…").foregroundStyle(.secondary)
-                                }
-                            }
+                // Single photo well: one flat background, one corner radius —
+                // no card-in-card nesting eating horizontal space.
+                Group {
+                    if let image {
+                        Image(nsImage: image)
+                            .resizable().aspectRatio(contentMode: .fit)
+                    } else {
+                        VStack(spacing: 6) {
+                            Image(systemName: "moon.zzz").font(.largeTitle).foregroundStyle(.secondary)
+                            Text(isEmpty ? caption : "Đang tải…").foregroundStyle(.secondary)
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
-                .frame(minHeight: 300)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(nsColor: .controlBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 // The single selected-time readout: big time + context,
                 // centred between photo and bar. Replaces the old corner
@@ -127,9 +100,8 @@ struct TimelineView: View {
                     onScrub: { _ in refresh() }
                 )
             }
-            .padding(14)
-        }
-        .frame(minWidth: 640, minHeight: 520)
+            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { cap.start(); rescope(forceWindow: true) }
         .onChange(of: scope.preset) { _ in rescope(forceWindow: true) }
         .onChange(of: cap.generation) { _ in rescope() }

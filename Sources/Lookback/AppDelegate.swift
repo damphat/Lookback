@@ -118,10 +118,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     @objc private func noteShutdown() { quitGate.systemShutdown = true }
 
-    /// Window closed -> release everything (timers die with the view,
-    /// thumbnails freed). Capture keeps running; reopening starts fresh.
+    /// Remembered frame (UserDefaults): the window reopens at the size the
+    /// user left it instead of snapping back to the default every time.
+    private static let frameKey = "lookback.windowFrame"
+    private static let defaultSize = NSSize(width: 1160, height: 720)
+
+    /// Window closed -> persist the frame, then release everything (timers
+    /// die with the view, thumbnails freed). Capture keeps running;
+    /// reopening restores the remembered size.
     func windowWillClose(_ notification: Notification) {
+        if let win = (notification.object as? NSWindow) ?? windowController?.window {
+            saveFrame(win.frame)
+        }
+        NotificationCenter.default.removeObserver(
+            self, name: NSWindow.didResizeNotification, object: windowController?.window)
+        NotificationCenter.default.removeObserver(
+            self, name: NSWindow.didMoveNotification, object: windowController?.window)
         windowController = nil
+    }
+
+    private func saveFrame(_ frame: NSRect) {
+        UserDefaults.standard.set(NSStringFromRect(frame), forKey: Self.frameKey)
+    }
+
+    @objc private func noteFrameChanged(_ note: Notification) {
+        if let win = note.object as? NSWindow { saveFrame(win.frame) }
     }
 
     /// Open the window if closed, raise + focus it if buried.
@@ -132,10 +153,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let win = NSWindow(contentViewController: host)
             win.title = "Lookback"
             win.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-            win.setContentSize(NSSize(width: 700, height: 600))
-            win.minSize = NSSize(width: 560, height: 480)
+            win.minSize = NSSize(width: 900, height: 580)
+            let visible = NSScreen.main?.visibleFrame
+                ?? NSRect(x: 0, y: 0, width: 1728, height: 1079)
+            let saved: CGRect? = UserDefaults.standard.string(forKey: Self.frameKey)
+                .map(NSRectFromString)
+                .flatMap { $0.isEmpty ? nil : $0 }
+            win.setFrame(
+                WindowFrame.restored(
+                    saved: saved, minSize: win.minSize,
+                    defaultSize: Self.defaultSize, visible: visible),
+                display: false)
             win.isReleasedWhenClosed = false
             win.delegate = self
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(noteFrameChanged),
+                name: NSWindow.didResizeNotification, object: win)
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(noteFrameChanged),
+                name: NSWindow.didMoveNotification, object: win)
             windowController = NSWindowController(window: win)
         }
         NSApp.activate(ignoringOtherApps: true)
