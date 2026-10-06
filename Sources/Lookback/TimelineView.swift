@@ -16,6 +16,9 @@ struct TimelineView: View {
     @State private var caption = ""
     @State private var isEmpty = false
     @State private var imageTask: Task<Void, Never>?
+    /// Window edge rides "now" on trailing presets; 30s is plenty (shots
+    /// land every 60s) and `tick` skips the write when nothing moved.
+    private static let ticker = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
     private var window: (Date, Date) { (scope.from, scope.to) }
     /// Built once per body from cached shots + fixed preset window.
@@ -37,7 +40,12 @@ struct TimelineView: View {
                     }
                 }
                 Section("Ghi hình") {
-                    Toggle("Tạm dừng chụp", isOn: $cap.paused)
+                    // Pause lives ONLY in the tray menu (single start/stop);
+                    // the window shows the state read-only, no second switch.
+                    if cap.paused {
+                        Label("Đang tạm dừng chụp", systemImage: "pause.circle")
+                            .foregroundStyle(.secondary)
+                    }
                     Button("Mở thư mục ảnh") { NSWorkspace.shared.open(ShotStore.dir) }
                     Text("\(TimeText.long(activeMinutes)) hoạt động trong khung này")
                         .font(.caption).foregroundStyle(.secondary)
@@ -56,7 +64,7 @@ struct TimelineView: View {
                         Spacer(minLength: 4)
                         Button("Cấp quyền…") { cap.requestPermission() }
                             .controlSize(.small)
-                        Button("Kiểm tra lại") { cap.refreshPermission(); reload() }
+                        Button("Kiểm tra lại") { cap.refreshPermission(); rescope() }
                             .controlSize(.small)
                     }
                     .padding(8)
@@ -67,17 +75,13 @@ struct TimelineView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "lock.trianglebadge.exclamationmark")
                             .foregroundStyle(.orange)
-                        Text("Chrome đang mở nhưng Lookback bị từ chối Automation nên không lấy được tên website.")
+                        Text("Lookback chưa có quyền Automation nên không lấy được tên website từ Chrome.")
                             .font(.callout).lineLimit(2).truncationMode(.tail)
                         Spacer(minLength: 4)
-                        Button("Cấp quyền…") { cap.requestAutomation() }
+                        // ONE button: tries the consent dialog, falls back to
+                        // Settings when macOS stays silent after a past deny.
+                        Button("Cấp quyền…") { cap.fixAutomation(); rescope() }
                             .controlSize(.small)
-                        Button("Mở Settings…") {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }
-                        .controlSize(.small)
                     }
                     .padding(8)
                     .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
@@ -126,18 +130,35 @@ struct TimelineView: View {
             .padding(14)
         }
         .frame(minWidth: 640, minHeight: 520)
-        .onAppear { scope.refreshWindow(); reload(); cap.start() }
-        .onChange(of: scope.preset) { _ in scope.refreshWindow(); reload(keepPosition: true); clampSelection(); refresh() }
+        .onAppear { cap.start(); rescope(forceWindow: true) }
+        .onChange(of: scope.preset) { _ in rescope(forceWindow: true) }
+        .onChange(of: cap.generation) { _ in rescope() }
+        .onReceive(Self.ticker) { _ in rescope() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            reload(keepPosition: true)
+            cap.refreshPermission(); rescope()
         }
     }
 
     // MARK: - Helpers
 
-    private func clampSelection() {
+    /// THE single rescope: EVERY window change flows here (open, preset,
+    /// new shot, 30s tick, window focus, permission tap). Live-pin rule:
+    /// selection near `to` means "watching now" → ride the new edge,
+    /// otherwise clamp into the window. This replaces the old scatter of
+    /// reload(keepPosition:) + clampSelection + refresh call sites.
+    private func rescope(forceWindow: Bool = false) {
+        let wasLive = TimeScope.isLive(selectedDate, to: scope.to)
+        scope.tick(force: forceWindow)
         let (from, to) = window
-        selectedDate = min(max(selectedDate, from), to)
+        shots = ShotStore.list().filter { $0.date >= from && $0.date <= to }
+        if shots.isEmpty {
+            image = nil
+            caption = "Chưa có hoạt động nào trong khung này."
+            isEmpty = true
+        } else {
+            selectedDate = wasLive ? to : min(max(selectedDate, from), to)
+            refresh()
+        }
     }
 
     /// Viewer truth = the same `view(at:)` the bar hovers. The viewer never
@@ -169,21 +190,6 @@ struct TimelineView: View {
             if let img = await Task.detached(priority: .userInitiated) { NSImage(contentsOf: url) }.value {
                 if !Task.isCancelled { image = img }
             }
-        }
-    }
-
-    private func reload(keepPosition: Bool = false) {
-        let (from, to) = window
-        let all = ShotStore.list()
-        shots = all.filter { $0.date >= from && $0.date <= to }
-        if shots.isEmpty {
-            image = nil
-            caption = "Chưa có hoạt động nào trong khung này."
-            isEmpty = true
-        } else {
-            if !keepPosition { selectedDate = to }
-            clampSelection()
-            refresh()
         }
     }
 

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CoreGraphics
 import SwiftUI
 
@@ -10,12 +11,29 @@ struct QuitGate {
     var shouldTerminate: Bool { allowQuit || systemShutdown }
 }
 
+/// Pure tray mapping, testable without NSApp. One disambiguation rule:
+/// the icon always shows STATE (same face, dimmed when stopped), the menu
+/// item always shows ACTION (a verb naming what the click will do). Never
+/// a ⏸ glyph on the icon — nobody can tell whether it means "stopped now"
+/// or "click to stop".
+enum TrayState {
+    static let symbol = "clock.arrow.circlepath"
+    static func dimmed(paused: Bool) -> Bool { paused }
+    static func toolTip(paused: Bool) -> String {
+        paused ? "Lookback (đang dừng chụp)" : "Lookback"
+    }
+    static func menuTitle(paused: Bool) -> String {
+        paused ? "Tiếp tục chụp" : "Tạm dừng chụp"
+    }
+}
+
 /// Agent-style app: no Dock icon (LSUIElement), no window at launch.
 /// Left-click tray icon = open + raise window, right-click = menu.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let cap = CaptureService.shared
     private var statusItem: NSStatusItem!
     private var windowController: NSWindowController?
+    private var pauseWatch: AnyCancellable?
     /// Quit gate: only the tray "Thoát" item opens it. Everything else that
     /// asks to quit (accidental Cmd+Q) is vetoed; real logout/restart/
     /// shutdown still goes through.
@@ -33,19 +51,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         cap.start()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
-            button.image = NSImage(
-                systemSymbolName: "clock.arrow.circlepath",
-                accessibilityDescription: "Lookback")
             button.target = self
             button.action = #selector(handleClick(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
-        // Fresh install / overwrite without Screen Recording permission:
-        // pop the window open so the user SEES the banner instead of
-        // running blind all day with zero shots captured.
-        if !CGPreflightScreenCaptureAccess() {
+        refreshTrayIcon(paused: cap.paused)
+        // Pass the emitted value through: @Published fires from willSet, so
+        // re-reading cap.paused in here sees the PREVIOUS state (tray lagged
+        // one toggle behind, then read inverted). Never re-read in a sink.
+        pauseWatch = cap.$paused.sink { [weak self] paused in
+            self?.refreshTrayIcon(paused: paused)
+        }
+        // Missing EITHER gate (Recording or Automation — both checked in
+        // start()): pop the window open so the user SEES the banner instead
+        // of running blind with a silent denial.
+        if !cap.permissionGranted || cap.automationDenied {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.showWindow() }
         }
+    }
+
+    /// Single place that draws the tray icon. Same face always; stopped
+    /// reads as dimmed + tooltip. Takes the state as a parameter — callers
+    /// pass the fresh value, never a re-read inside a Combine sink.
+    private func refreshTrayIcon(paused: Bool) {
+        guard let button = statusItem?.button else { return }
+        button.image = NSImage(
+            systemSymbolName: TrayState.symbol,
+            accessibilityDescription: "Lookback")
+        button.appearsDisabled = TrayState.dimmed(paused: paused)
+        button.toolTip = TrayState.toolTip(paused: paused)
     }
 
     @objc private func handleClick(_ sender: NSStatusBarButton) {
@@ -61,32 +95,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// The ONLY capture control in the app: one start/stop toggle.
+    /// (Left-click opens the window; the in-window checkbox is gone.)
     private func trayMenu() -> NSMenu {
         let menu = NSMenu()
-        let open = NSMenuItem(title: "Mở cửa sổ Lookback", action: #selector(showWindowFromMenu), keyEquivalent: "")
-        open.target = self
-        menu.addItem(open)
-        let pauseTitle = cap.paused ? "Tiếp tục chụp" : "Tạm dừng chụp"
-        let pause = NSMenuItem(title: pauseTitle, action: #selector(togglePause), keyEquivalent: "")
+        let pause = NSMenuItem(title: TrayState.menuTitle(paused: cap.paused), action: #selector(togglePause), keyEquivalent: "")
         pause.target = self
         menu.addItem(pause)
         menu.addItem(.separator())
-        let about = NSMenuItem(title: "Về Lookback…", action: #selector(showAbout), keyEquivalent: "")
-        about.target = self
-        menu.addItem(about)
         let quit = NSMenuItem(title: "Thoát", action: #selector(quitApp), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
         return menu
     }
 
-    @objc private func showWindowFromMenu() { showWindow() }
     @objc private func togglePause() { cap.paused.toggle() }
-    /// Standard About panel: app name, icon, version (from Info.plist).
-    @objc private func showAbout() {
-        NSApp.activate(ignoringOtherApps: true)
-        NSApp.orderFrontStandardAboutPanel(nil)
-    }
     /// The ONLY user path that quits the app: right-click tray → Thoát.
     @objc private func quitApp() {
         quitGate.allowQuit = true

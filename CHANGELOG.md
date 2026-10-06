@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.5 — 2026-10-06
+
+Lô TODO menu/window + fix đảo ngược trạng thái tray. Mental model gọn: window
+= f(preset, now), selection là ghim ở mép phải.
+
+- Nhớ khung giờ đã chọn (persist preset, mở window không về 24h nữa).
+- Ảnh mới tự đẩy vào window đang mở (không cần refresh tay); mép window trôi
+  theo "now" mỗi 30s kể cả khi máy idle.
+- Con trỏ ở "now" thì bám mép khi có ảnh mới/đổi khung; mọi thay đổi window đi
+  qua đúng một hàm `rescope()` (xóa `reload(keepPosition:)`/`clampSelection`).
+- Banner Automation gộp 2 nút thành 1 (`fixAutomation()`: thử dialog consent,
+  im lặng thì mở thẳng Settings). Check cả 2 cổng quyền ngay khi khởi động;
+  denial thành latch dính, hết chớp tắt theo chu kỳ capture.
+- Tray menu chỉ còn start/stop + Thoát; bỏ checkbox trong window. Fix tray lag
+  1 nhịp rồi đảo ngược (sink đọc lại `paused` trong khi `@Published` bắn từ
+  `willSet`): icon giữ một mặt, dừng = mờ + tooltip; mapping thuần `TrayState`
+  có test khóa.
+
 ## Chưa phát hành
 
 - `NSAppleEventsUsageDescription` trong Info.plist (thiếu key này macOS deny

@@ -13,8 +13,10 @@ import Foundation
 /// - VSCode folder: frontmost VSCode window title via CGWindowList
 ///   (no permission needed), last path component only.
 enum ActiveContext {
-    /// Outcome of the last `current()` call: true only when Chrome was
-    /// frontmost AND Automation consent is missing. Drives the banner.
+    /// Sticky denial latch: set the moment Chrome is frontmost without
+    /// consent, cleared only when a live check proves consent granted.
+    /// Never cleared by "Chrome isn't frontmost right now" — that flip-flop
+    /// was the banner blinking on/off every capture cycle. Drives the banner.
     static var chromeDenied = false
     struct Info {
         /// Display name of the frontmost app, e.g. "Google Chrome".
@@ -31,12 +33,15 @@ enum ActiveContext {
         let appName = front.localizedName?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let name = (appName?.isEmpty == false) ? appName : nil
-        chromeDenied = false // re-armed below only on a live denial
+        let isChrome = bundleID == "com.google.Chrome"
+            || name?.lowercased().contains("chrome") == true
+        // Latch discipline: only a live Chrome moment may touch the latch.
+        // Anything else leaves it alone, so the banner can't blink.
+        if isChrome { chromeDenied = chromeAutomationDenied() }
 
         let detail: String?
-        if bundleID == "com.google.Chrome"
-            || name?.lowercased().contains("chrome") == true {
-            detail = chromeDomain()
+        if isChrome {
+            detail = chromeDenied ? nil : chromeDomain()
         } else if bundleID == "com.microsoft.VSCode"
             || name == "Visual Studio Code"
             || name == "Code" {
@@ -90,11 +95,9 @@ enum ActiveContext {
     }
 
     /// Domain of the active tab, e.g. "github.com". Nil when Chrome is not
-    /// scriptable right now (no window, ...). A consent denial is recorded
-    /// in `chromeDenied` instead of being retried blindly every minute.
+    /// scriptable right now (no window, ...). Caller has already proven
+    /// consent, so this never touches the latch.
     private static func chromeDomain() -> String? {
-        if chromeAutomationDenied() { chromeDenied = true; return nil }
-        chromeDenied = false
         let src = "tell application \"Google Chrome\" to get URL of active tab of front window"
         guard let script = NSAppleScript(source: src) else { return nil }
         var err: NSDictionary?

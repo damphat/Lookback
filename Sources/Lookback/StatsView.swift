@@ -81,6 +81,7 @@ struct StatsView: View {
         }
         .padding(14)
         .onAppear { reload() }
+        .onReceive(cap.$generation) { _ in reload() }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             reload()
         }

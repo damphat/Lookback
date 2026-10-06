@@ -14,9 +14,13 @@ final class CaptureService: ObservableObject {
 
     @Published var paused = false
     @Published var permissionGranted = CGPreflightScreenCaptureAccess()
-    /// True when Chrome was frontmost but Automation consent is missing
-    /// (domain capture silently degraded). Mirrors `permissionGranted`.
+    /// Sticky Automation latch (mirrors `permissionGranted`): set the moment
+    /// consent is proven missing — at launch or when Chrome is frontmost —
+    /// cleared only when a check proves it granted. Never blinks.
     @Published var automationDenied = false
+    /// Bumped on the main thread after every saved shot: open windows observe
+    /// it and rescope, so new photos appear with no manual refresh.
+    @Published private(set) var generation = 0
 
     private var timer: Timer?
     private var lastHash = ""
@@ -31,7 +35,11 @@ final class CaptureService: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
-        permissionGranted = CGPreflightScreenCaptureAccess()
+        // Both gates are checked at launch (like Recording): a missing one
+        // shows its banner the first time the window opens, no silent wait
+        // until the background loop happens to touch it.
+        refreshPermission()
+        refreshAutomation()
         ShotStore.cleanup()
         queue.async { self.capture() } // capture once at launch
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
@@ -55,10 +63,24 @@ final class CaptureService: ObservableObject {
         permissionGranted = CGPreflightScreenCaptureAccess()
     }
 
-    /// User-tapped consent request: pops the real system dialog and creates
-    /// the Automation entry for THIS binary. Call only from explicit UI.
-    func requestAutomation() {
+    /// Check consent WITHOUT prompting. Safe to call anywhere, anytime.
+    func refreshAutomation() {
+        automationDenied = ActiveContext.chromeAutomationDenied()
+    }
+
+    /// THE one banner button: tries the real consent dialog first (works
+    /// only before the first denial — afterwards macOS stays silent, which
+    /// is why the old button looked "broken"). Still denied afterwards?
+    /// Opens Settings directly, so the tap always visibly does something.
+    func fixAutomation() {
         automationDenied = !ActiveContext.requestChromeAutomation()
+        if automationDenied { Self.openAutomationSettings() }
+    }
+
+    static func openAutomationSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func idleSeconds() -> TimeInterval {
@@ -90,12 +112,20 @@ final class CaptureService: ObservableObject {
         let now = Date()
         // Best-effort context (frontmost app + Chrome domain / VSCode
         // folder). Nil parts are dropped, degrading to timestamp-only.
+        // `current()` maintains the sticky denial latch as a side effect.
         let ctx = ActiveContext.current()
         let denied = ActiveContext.chromeDenied
-        DispatchQueue.main.async { self.automationDenied = denied }
         let url = ShotStore.dir.appendingPathComponent(
             ShotStore.filename(for: now, app: ctx.app, detail: ctx.detail))
-        try? jpg.write(to: url)
+        do {
+            try jpg.write(to: url)
+            DispatchQueue.main.async {
+                // Sticky: only ever set here; cleared only by a granted
+                // check (launch / banner tap), so the banner can't blink.
+                if denied { self.automationDenied = true }
+                self.generation += 1
+            }
+        } catch { return }
         // Opportunistic cleanup once per capture.
         ShotStore.cleanup()
     }
